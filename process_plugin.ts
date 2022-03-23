@@ -1,3 +1,4 @@
+import { extractCargoVersion } from "./cargo.ts";
 import { getChecksum } from "./hash.ts";
 
 export type Platform = "windows-x86_64" | "linux-x86_64" | "darwin-x86_64" | "darwin-aarch64";
@@ -77,5 +78,47 @@ export class PluginFileBuilder {
 
   outputText() {
     return JSON.stringify(this.#output, undefined, 2) + "\n";
+  }
+}
+
+/** Creates a process plugin for the dprint GitHub organization. */
+export async function createDprintOrgProcessPlugin({ pluginName, version, platforms, isTest }: {
+  pluginName: string;
+  version: string;
+  platforms: Platform[];
+  /** Creates a plugin file with only the current platform using
+   * a zip file in the current folder.
+   */
+  isTest: boolean;
+}) {
+  const builder = new PluginFileBuilder({
+    name: pluginName,
+    version: version,
+  });
+
+  if (isTest) {
+    const platform = getCurrentPlatform();
+    const zipFileName = getStandardZipFileName(builder.pluginName, platform);
+    await builder.addPlatform({
+      platform,
+      zipFilePath: zipFileName,
+      zipUrl: zipFileName,
+    });
+  } else {
+    for (const platform of platforms) {
+      await addPlatform(platform);
+    }
+  }
+
+  await builder.writeToPath("plugin.exe-plugin");
+
+  async function addPlatform(platform: Platform) {
+    const zipFileName = getStandardZipFileName(builder.pluginName, platform);
+    const zipUrl = `https://github.com/dprint/${pluginName}/releases/download/${builder.version}/${zipFileName}`;
+    await builder.addPlatform({
+      platform,
+      zipFilePath: zipFileName,
+      zipUrl,
+    });
   }
 }
