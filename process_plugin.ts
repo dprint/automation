@@ -1,4 +1,3 @@
-import { extractCargoVersion } from "./cargo.ts";
 import { getChecksum } from "./hash.ts";
 
 export type Platform = "windows-x86_64" | "linux-x86_64" | "darwin-x86_64" | "darwin-aarch64";
@@ -39,6 +38,7 @@ export interface PluginFileBuilderOptions {
 export class PluginFileBuilder {
   #output: any = {
     schemaVersion: 2,
+    kind: "process",
   };
 
   constructor(options: PluginFileBuilderOptions) {
@@ -110,7 +110,7 @@ export async function createDprintOrgProcessPlugin({ pluginName, version, platfo
     }
   }
 
-  await builder.writeToPath("plugin.exe-plugin");
+  await builder.writeToPath("plugin.json");
 
   async function addPlatform(platform: Platform) {
     const zipFileName = getStandardZipFileName(builder.pluginName, platform);

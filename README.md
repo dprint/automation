@@ -33,7 +33,7 @@ await builder.addPlatform({
 });
 
 // write it to a file
-await builder.writeToPath("plugin.exe-plugin");
+await builder.writeToPath("plugin.json");
 ```
 
 1. Build each plugin for each platform.
@@ -42,4 +42,4 @@ await builder.writeToPath("plugin.exe-plugin");
    ```shell
    deno run --allow-read=. --allow-write=. create_process_plugin.ts
    ```
-4. Upload the plugin.exe-plugin file and all the zip files to the GitHub release.
+4. Upload the `plugin.json` file and all the zip files to the GitHub release.
