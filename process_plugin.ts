@@ -1,22 +1,35 @@
 import { getChecksum } from "./hash.ts";
 
-export type Platform = "windows-x86_64" | "linux-x86_64" | "darwin-x86_64" | "darwin-aarch64";
+export type Platform =
+  | "darwin-x86_64"
+  | "darwin-aarch64"
+  | "linux-x86_64"
+  | "linux-aarch64"
+  | "windows-x86_64"
+  | "windows-aarch64";
 
 export function getStandardZipFileName(pluginName: string, platform: Platform) {
   switch (platform) {
-    case "darwin-aarch64":
-      return `${pluginName}-aarch64-apple-darwin.zip`;
     case "darwin-x86_64":
       return `${pluginName}-x86_64-apple-darwin.zip`;
+    case "darwin-aarch64":
+      return `${pluginName}-aarch64-apple-darwin.zip`;
     case "linux-x86_64":
       return `${pluginName}-x86_64-unknown-linux-gnu.zip`;
+    case "linux-aarch64":
+      return `${pluginName}-aarch64-unknown-linux-gnu.zip`;
     case "windows-x86_64":
       return `${pluginName}-x86_64-pc-windows-msvc.zip`;
+    case "windows-aarch64":
+      return `${pluginName}-aarch64-pc-windows-msvc.zip`;
+    default:
+      const _never: never = platform;
+      throw new Error(`Not supported platform: ${platform}`);
   }
 }
 
 export function getCurrentPlatform() {
-  return `${Deno.build.os}-x86_64` as const;
+  return `${Deno.build.os}-${Deno.build.arch}` as const;
 }
 
 export interface AddPlatformOptions {
