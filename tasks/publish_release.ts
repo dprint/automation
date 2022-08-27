@@ -9,6 +9,7 @@ const cwd = $.path.resolve(".");
 const cargoTomlFilePath = $.path.join(cwd, cliArgs.cargoTomlPath);
 const cargoTomlText = await Deno.readTextFile(cargoTomlFilePath);
 const currentVersion = extractCargoVersionFromTextOrThrow(cargoTomlText);
+$.logLight(`  Found version: ${currentVersion}`);
 const newVersion = semver.parse(currentVersion)!.inc(cliArgs.kind).toString();
 
 $.logStep(`Setting new version to ${newVersion}...`);

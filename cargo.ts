@@ -17,11 +17,11 @@ export function extractCargoVersionFromTextOrThrow(packageText: string) {
 
 export function extractCargoVersionFromText(packageText: string) {
   // version = "x.x.x"
-  return packageText.match(/^version\s*=\s*\"(\d+\.\d+\.\d+)$\"/m)?.[1];
+  return packageText.match(/^version\s*=\s*\"(\d+\.\d+\.\d+)\"$/m)?.[1];
 }
 
 export function setCargoVersionInText(packageText: string, version: string) {
-  const newText = packageText.replace(/^version\s*=\s*\"(\d+\.\d+\.\d+)$\"/m, `version = "${version}"`);
+  const newText = packageText.replace(/^version\s*=\s*\"(\d+\.\d+\.\d+)\"$/m, `version = "${version}"`);
   if (newText === packageText) {
     const currentVersion = extractCargoVersionFromText(packageText);
     if (currentVersion !== version) {
