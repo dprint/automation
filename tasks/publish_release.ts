@@ -29,31 +29,28 @@ $.logStep(`Tagging...`);
 await $`git tag ${newVersion}`;
 await $`git push origin ${newVersion}`;
 
-interface CliArgs {
-  kind: "major" | "minor" | "patch";
-  cargoTomlPath: string;
-}
-
 function getCliArgs() {
-  const args: CliArgs = {
-    kind: "patch",
-    cargoTomlPath: "./Cargo.toml",
-  };
+  // very basic arg parsing
+  let kind: "major" | "minor" | "patch" = "patch";
+  let cargoTomlPath: string | undefined = undefined;
 
   for (const arg of Deno.args) {
     if (arg === "--major") {
-      args.kind = "major";
+      kind = "major";
     } else if (arg === "--minor") {
-      args.kind = "minor";
+      kind = "minor";
     } else if (arg === "--patch") {
-      args.kind = "patch";
+      kind = "patch";
     } else if (arg.startsWith("--")) {
       throw new Error(`Invalid argument: ${arg}`);
-    } else if (args.cargoTomlPath == null) {
-      args.cargoTomlPath = arg;
+    } else if (cargoTomlPath == null) {
+      cargoTomlPath = arg;
     } else {
       throw new Error(`Invalid arguments: ${Deno.args.join(" ")}`);
     }
   }
-  return args;
+  return {
+    kind,
+    cargoTomlPath: cargoTomlPath ?? "./Cargo.toml",
+  };
 }

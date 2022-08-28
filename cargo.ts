@@ -22,15 +22,13 @@ export function extractCargoVersionFromText(packageText: string) {
 
 export function setCargoVersionInText(packageText: string, version: string) {
   const newText = packageText.replace(/^version\s*=\s*\"(\d+\.\d+\.\d+)\"$/m, `version = "${version}"`);
-  if (newText === packageText) {
-    const currentVersion = extractCargoVersionFromText(packageText);
-    if (currentVersion !== version) {
-      console.error("File text");
-      console.error("=========");
-      console.error(newText);
-      console.error("=========");
-      throw new Error(`No change in Cargo.toml file.`);
-    }
+  const currentVersion = extractCargoVersionFromText(packageText);
+  if (currentVersion !== version) {
+    console.error("File text");
+    console.error("=========");
+    console.error(newText);
+    console.error("=========");
+    throw new Error(`Version didn't seem to be set properly.`);
   }
   return newText;
 }
