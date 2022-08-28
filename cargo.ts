@@ -22,7 +22,7 @@ export function extractCargoVersionFromText(packageText: string) {
 
 export function setCargoVersionInText(packageText: string, version: string) {
   const newText = packageText.replace(/^version\s*=\s*\"(\d+\.\d+\.\d+)\"$/m, `version = "${version}"`);
-  const currentVersion = extractCargoVersionFromText(packageText);
+  const currentVersion = extractCargoVersionFromText(newText);
   if (currentVersion !== version) {
     console.error("File text");
     console.error("=========");
