@@ -4,6 +4,7 @@ export type Platform =
   | "darwin-x86_64"
   | "darwin-aarch64"
   | "linux-x86_64"
+  | "linux-x86_64-musl"
   | "linux-aarch64"
   | "windows-x86_64"
   | "windows-aarch64";
@@ -16,6 +17,8 @@ export function getStandardZipFileName(pluginName: string, platform: Platform) {
       return `${pluginName}-aarch64-apple-darwin.zip`;
     case "linux-x86_64":
       return `${pluginName}-x86_64-unknown-linux-gnu.zip`;
+    case "linux-x86_64-musl":
+      return `${pluginName}-x86_64-unknown-linux-musl.zip`;
     case "linux-aarch64":
       return `${pluginName}-aarch64-unknown-linux-gnu.zip`;
     case "windows-x86_64":
