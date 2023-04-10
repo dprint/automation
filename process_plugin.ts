@@ -6,6 +6,7 @@ export type Platform =
   | "linux-x86_64"
   | "linux-x86_64-musl"
   | "linux-aarch64"
+  | "linux-aarch64-musl"
   | "windows-x86_64"
   | "windows-aarch64";
 
@@ -21,6 +22,8 @@ export function getStandardZipFileName(pluginName: string, platform: Platform) {
       return `${pluginName}-x86_64-unknown-linux-musl.zip`;
     case "linux-aarch64":
       return `${pluginName}-aarch64-unknown-linux-gnu.zip`;
+    case "linux-aarch64-musl":
+      return `${pluginName}-aarch64-unknown-linux-musl.zip`;
     case "windows-x86_64":
       return `${pluginName}-x86_64-pc-windows-msvc.zip`;
     case "windows-aarch64":
@@ -32,6 +35,9 @@ export function getStandardZipFileName(pluginName: string, platform: Platform) {
 }
 
 export function getCurrentPlatform() {
+  if (Deno.build.os !== "linux" && Deno.build.os !== "darwin" && Deno.build.os !== "windows") {
+    throw new Error("Not supported operating system: " + Deno.build.os);
+  }
   return `${Deno.build.os}-${Deno.build.arch}` as const;
 }
 
