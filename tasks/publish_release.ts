@@ -5,15 +5,15 @@ import { $, extractCargoVersionFromTextOrThrow, semver, setCargoVersionInText } 
 const cliArgs = getCliArgs();
 
 $.logStep("Retrieving current Cargo.toml version...");
-const cwd = $.path.resolve(".");
-const cargoTomlFilePath = $.path.join(cwd, cliArgs.cargoTomlPath);
-const cargoTomlText = await Deno.readTextFile(cargoTomlFilePath);
+const cwd = $.path(".").resolve();
+const cargoTomlFile = cwd.join(cliArgs.cargoTomlPath);
+const cargoTomlText = cargoTomlFile.readTextSync();
 const currentVersion = extractCargoVersionFromTextOrThrow(cargoTomlText);
 $.logLight(`  Found version: ${currentVersion}`);
 const newVersion = semver.parse(currentVersion)!.inc(cliArgs.kind).toString();
 
 $.logStep(`Setting new version to ${newVersion}...`);
-await Deno.writeTextFile(cargoTomlFilePath, setCargoVersionInText(cargoTomlText, newVersion));
+cargoTomlFile.writeTextSync(setCargoVersionInText(cargoTomlText, newVersion));
 
 $.logStep(`Running cargo update...`);
 await $`cargo update --workspace`;
