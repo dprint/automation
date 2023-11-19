@@ -1,19 +1,19 @@
 // adapted from https://github.com/denoland/automation/blob/main/tasks/publish_release.ts
 
-import { $, extractCargoVersionFromTextOrThrow, semver, setCargoVersionInText } from "../mod.ts";
+import { $, CargoToml, semver } from "../mod.ts";
 
 const cliArgs = getCliArgs();
 
 $.logStep("Retrieving current Cargo.toml version...");
 const cwd = $.path(".").resolve();
-const cargoTomlFile = cwd.join(cliArgs.cargoTomlPath);
-const cargoTomlText = cargoTomlFile.readTextSync();
-const currentVersion = extractCargoVersionFromTextOrThrow(cargoTomlText);
+const cargoTomlFile = new CargoToml(cwd.join(cliArgs.cargoTomlPath));
+const currentVersion = cargoTomlFile.version();
 $.logLight(`  Found version: ${currentVersion}`);
-const newVersion = semver.parse(currentVersion)!.inc(cliArgs.kind).toString();
+const newVersion = semver.format(semver.increment(semver.parse(currentVersion), cliArgs.kind));
 
 $.logStep(`Setting new version to ${newVersion}...`);
-cargoTomlFile.writeTextSync(setCargoVersionInText(cargoTomlText, newVersion));
+cargoTomlFile.setVersion(newVersion);
+cargoTomlFile.save();
 
 $.logStep(`Running cargo update...`);
 await $`cargo update --workspace`;

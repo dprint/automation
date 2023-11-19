@@ -1,34 +1,48 @@
-export async function extractCargoVersionOrThrow(filePath: string) {
-  const packageText = await Deno.readTextFile(filePath);
-  const version = extractCargoVersionFromText(packageText);
-  if (version == null) {
-    throw new Error(`Could not find version in Cargo.toml at ${filePath}`);
+import type { dax } from "./deps.ts";
+import { semver } from "./deps.ts";
+
+export class CargoToml {
+  #path: dax.PathRef;
+  #text: string;
+
+  static versionRegex = /^version\s*=\s*\"(\d+\.\d+\.\d+)\"$/m;
+
+  constructor(path: dax.PathRef) {
+    this.#path = path;
+    this.#text = path.readTextSync();
   }
-  return version;
+
+  bumpCargoTomlVersion(kind: "minor" | "patch") {
+    const currentVersion = this.version();
+    const newVersion = semver.format(semver.increment(semver.parse(currentVersion), kind));
+    this.#text = this.#text.replace(CargoToml.versionRegex, `version = "${newVersion}"`);
+  }
+
+  version() {
+    const currentVersion = extractCargoVersionFromText(this.#text);
+    if (currentVersion == null) {
+      throw new Error("Could not find version.");
+    }
+    return currentVersion;
+  }
+
+  setVersion(version: string) {
+    const newText = this.#text.replace(/^version\s*=\s*\"(\d+\.\d+\.\d+)\"$/m, `version = "${version}"`);
+    if (extractCargoVersionFromText(newText) !== version) {
+      console.error("File text");
+      console.error("=========");
+      console.error(newText);
+      console.error("=========");
+      throw new Error(`Version didn't seem to be set properly.`);
+    }
+    this.#text = newText;
+  }
+
+  save() {
+    this.#path.writeTextSync(this.#text);
+  }
 }
 
-export function extractCargoVersionFromTextOrThrow(packageText: string) {
-  const version = extractCargoVersionFromText(packageText);
-  if (version == null) {
-    throw new Error(`Could not find version in Cargo.toml`);
-  }
-  return version;
-}
-
-export function extractCargoVersionFromText(packageText: string) {
-  // version = "x.x.x"
-  return packageText.match(/^version\s*=\s*\"(\d+\.\d+\.\d+)\"$/m)?.[1];
-}
-
-export function setCargoVersionInText(packageText: string, version: string) {
-  const newText = packageText.replace(/^version\s*=\s*\"(\d+\.\d+\.\d+)\"$/m, `version = "${version}"`);
-  const currentVersion = extractCargoVersionFromText(newText);
-  if (currentVersion !== version) {
-    console.error("File text");
-    console.error("=========");
-    console.error(newText);
-    console.error("=========");
-    throw new Error(`Version didn't seem to be set properly.`);
-  }
-  return newText;
+function extractCargoVersionFromText(text: string) {
+  return text.match(CargoToml.versionRegex)?.[1];
 }
