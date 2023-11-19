@@ -12,10 +12,25 @@ export class CargoToml {
     this.#text = path.readTextSync();
   }
 
-  bumpCargoTomlVersion(kind: "minor" | "patch") {
+  text() {
+    return this.#text;
+  }
+
+  setText(text: string) {
+    this.#text = text;
+    const temp = this.#path.withExtname(".tmp");
+    temp.writeTextSync(this.#text);
+    temp.renameSync(this.#path);
+  }
+
+  bumpCargoTomlVersion(kind: "major" | "minor" | "patch") {
     const currentVersion = this.version();
     const newVersion = semver.format(semver.increment(semver.parse(currentVersion), kind));
-    this.#text = this.#text.replace(CargoToml.versionRegex, `version = "${newVersion}"`);
+    this.setText(this.#text.replace(CargoToml.versionRegex, `version = "${newVersion}"`));
+  }
+
+  replaceAll(from: string, to: string) {
+    this.setText(this.#text.replaceAll(from, to));
   }
 
   version() {
@@ -35,11 +50,7 @@ export class CargoToml {
       console.error("=========");
       throw new Error(`Version didn't seem to be set properly.`);
     }
-    this.#text = newText;
-  }
-
-  save() {
-    this.#path.writeTextSync(this.#text);
+    this.setText(newText);
   }
 }
 

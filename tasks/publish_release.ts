@@ -13,7 +13,6 @@ const newVersion = semver.format(semver.increment(semver.parse(currentVersion), 
 
 $.logStep(`Setting new version to ${newVersion}...`);
 cargoTomlFile.setVersion(newVersion);
-cargoTomlFile.save();
 
 $.logStep(`Running cargo update...`);
 await $`cargo update --workspace`;
