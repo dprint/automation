@@ -1,3 +1,3 @@
-export * as semver from "https://deno.land/std@0.207.0/semver/mod.ts";
-export * as dax from "https://deno.land/x/dax@0.35.0/mod.ts";
-export { default as $ } from "https://deno.land/x/dax@0.35.0/mod.ts";
+export * as dax from "jsr:@david/dax@0.42.0";
+export { default as $ } from "jsr:@david/dax@0.42.0";
+export * as semver from "jsr:@std/semver@1";

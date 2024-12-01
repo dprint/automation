@@ -2,12 +2,12 @@ import type { dax } from "./deps.ts";
 import { semver } from "./deps.ts";
 
 export class CargoToml {
-  #path: dax.PathRef;
+  #path: dax.Path;
   #text: string;
 
   static versionRegex = /^version\s*=\s*\"(\d+\.\d+\.\d+)\"$/m;
 
-  constructor(path: dax.PathRef) {
+  constructor(path: dax.Path) {
     this.#path = path;
     this.#text = path.readTextSync();
   }

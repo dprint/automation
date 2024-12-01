@@ -33,9 +33,9 @@ export async function generateChangeLog(opts: { versionTo: string; versionFrom?:
     const versions = gitTags
       .filter(tag => isVersion(tag))
       .map(tag => semver.parse(tag))
-      .sort(semver.rcompare);
+      .sort((a, b) => semver.compare(b, a));
     $.logLight("Versions:", versions.map(v => semver.format(v)).join(", "));
-    const pastVersion = versions.filter(version => semver.gt(newVersion, version))[0];
+    const pastVersion = versions.filter(version => semver.greaterThan(newVersion, version))[0];
     if (pastVersion == null) {
       throw new Error("Could not find a past version.");
     }
