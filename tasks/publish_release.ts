@@ -1,6 +1,8 @@
 // adapted from https://github.com/denoland/automation/blob/main/tasks/publish_release.ts
 
-import { $, CargoToml, semver } from "../mod.ts";
+import $ from "dax";
+import * as semver from "semver";
+import { CargoToml } from "../mod.ts";
 
 const cliArgs = getCliArgs();
 

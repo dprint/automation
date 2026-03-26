@@ -1,5 +1,5 @@
-import type { dax } from "./deps.ts";
-import { semver } from "./deps.ts";
+import type * as dax from "dax";
+import * as semver from "semver";
 
 export class CargoToml {
   #path: dax.Path;

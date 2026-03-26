@@ -1,0 +1,24 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - '*'
+  pull_request:
+    branches: [main]
+
+jobs:
+  jsr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: canary
+      - name: Publish to JSR on tag
+        run: deno run -A jsr:@david/publish-on-tag@0.2.0

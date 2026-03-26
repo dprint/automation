@@ -1,17 +1,20 @@
-# dprint_automation
+# dprint automation
 
 Common scripts used across repos.
 
 ## Creating a Process Plugin File
+
+```
+> deno add jsr:@dprint/automation jsr:@std/semver
+```
 
 ```ts
 // create_process_plugin.ts
 import {
   extractCargoVersion,
   processPlugin,
-  // replace X.X.X with the latest tag in this repo
-} from "https://raw.githubusercontent.com/dprint/automation/X.X.X/mod.ts";
-import * as path from "https://deno.land/std@0.130.0/path/mod.ts";
+} from "@dprint/automation";
+import * as path from "path";
 
 const pluginName = "your-plugin-name";
 
@@ -29,7 +32,9 @@ const zipFileName = processPlugin.getStandardZipFileName(pluginName, "windows-x8
 await builder.addPlatform({
   platform: "windows-x86_64,
   zipFilePath: `path/to/${zipFileName}`,
-  zipUrl: `https://github.com/your-org-or-user/${pluginName}/releases/download/${builder.version}/${zipFileName}`,
+  // this can be a relative url starting in dprint 0.53.1, but there was sadly a bug
+  // in order versions that doesn't allow it (see https://github.com/dprint/dprint/pull/1114)
+  zipUrl: `https://plugins.dprint.dev/your-org-or-user/your-repo-name/${builder.version}/asset/${zipFileName}`,
 });
 
 // write it to a file

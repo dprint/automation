@@ -34,9 +34,10 @@ export function getStandardZipFileName(pluginName: string, platform: Platform) {
       return `${pluginName}-x86_64-pc-windows-msvc.zip`;
     case "windows-aarch64":
       return `${pluginName}-aarch64-pc-windows-msvc.zip`;
-    default:
+    default: {
       const _never: never = platform;
       throw new Error(`Not supported platform: ${platform}`);
+    }
   }
 }
 
@@ -142,7 +143,7 @@ export async function createDprintOrgProcessPlugin({ pluginName, version, platfo
 
   async function addPlatform(platform: Platform) {
     const zipFileName = getStandardZipFileName(builder.pluginName, platform);
-    const zipUrl = `https://github.com/dprint/${pluginName}/releases/download/${builder.version}/${zipFileName}`;
+    const zipUrl = `https://plugins.dprint.dev/dprint/${pluginName}/${builder.version}/asset/${zipFileName}`;
     await builder.addPlatform({
       platform,
       zipFilePath: zipFileName,

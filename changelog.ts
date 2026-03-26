@@ -1,4 +1,5 @@
-import { $, semver } from "./deps.ts";
+import $ from "dax";
+import * as semver from "semver";
 
 export async function generateChangeLog(opts: { versionTo: string; versionFrom?: string }) {
   if (!isVersion(opts.versionTo)) {
