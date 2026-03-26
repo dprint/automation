@@ -12,7 +12,7 @@ export type Platform =
   | "windows-x86_64"
   | "windows-aarch64";
 
-export function getStandardZipFileName(pluginName: string, platform: Platform) {
+export function getStandardZipFileName(pluginName: string, platform: Platform): string {
   switch (platform) {
     case "darwin-x86_64":
       return `${pluginName}-x86_64-apple-darwin.zip`;
@@ -41,7 +41,14 @@ export function getStandardZipFileName(pluginName: string, platform: Platform) {
   }
 }
 
-export function getCurrentPlatform() {
+export function getCurrentPlatform():
+  | "darwin-x86_64"
+  | "darwin-aarch64"
+  | "linux-x86_64"
+  | "linux-aarch64"
+  | "windows-x86_64"
+  | "windows-aarch64"
+{
   if (Deno.build.os !== "linux" && Deno.build.os !== "darwin" && Deno.build.os !== "windows") {
     throw new Error("Not supported operating system: " + Deno.build.os);
   }
@@ -75,11 +82,11 @@ export class PluginFileBuilder {
     this.#output.version = options.version;
   }
 
-  get pluginName() {
+  get pluginName(): string {
     return this.#output.name as string;
   }
 
-  get version() {
+  get version(): string {
     return this.#output.version as string;
   }
 
@@ -100,12 +107,12 @@ export class PluginFileBuilder {
     await Deno.writeTextFile(filePath, text);
   }
 
-  outputTextChecksum() {
+  outputTextChecksum(): Promise<string> {
     const text = this.outputText();
     return getChecksum(new TextEncoder().encode(text));
   }
 
-  outputText() {
+  outputText(): string {
     return JSON.stringify(this.#output, undefined, 2) + "\n";
   }
 }

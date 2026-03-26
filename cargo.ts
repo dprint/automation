@@ -12,7 +12,7 @@ export class CargoToml {
     this.#text = path.readTextSync();
   }
 
-  text() {
+  text(): string {
     return this.#text;
   }
 
@@ -33,7 +33,7 @@ export class CargoToml {
     this.setText(this.#text.replaceAll(from, to));
   }
 
-  version() {
+  version(): string {
     const currentVersion = extractCargoVersionFromText(this.#text);
     if (currentVersion == null) {
       throw new Error("Could not find version.");

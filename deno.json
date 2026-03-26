@@ -3,5 +3,6 @@
   "imports": {
     "dax": "jsr:@david/dax@0.45.0",
     "semver": "jsr:@std/semver@1"
-  }
+  },
+  "exports": "./mod.ts"
 }
