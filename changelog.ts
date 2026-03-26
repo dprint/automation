@@ -1,7 +1,7 @@
 import $ from "dax";
 import * as semver from "semver";
 
-export async function generateChangeLog(opts: { versionTo: string; versionFrom?: string }) {
+export async function generateChangeLog(opts: { versionTo: string; versionFrom?: string }): Promise<string> {
   if (!isVersion(opts.versionTo)) {
     throw new Error("versionTo must be a valid version.");
   }
