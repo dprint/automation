@@ -10,6 +10,7 @@ export type Platform =
   | "linux-riscv64"
   | "linux-riscv64-musl"
   | "linux-loongarch64"
+  | "linux-loongarch64-musl"
   | "windows-x86_64"
   | "windows-aarch64";
 
@@ -33,6 +34,8 @@ export function getStandardZipFileName(pluginName: string, platform: Platform): 
       return `${pluginName}-riscv64gc-unknown-linux-musl.zip`;
     case "linux-loongarch64":
       return `${pluginName}-loongarch64-unknown-linux-gnu.zip`;
+    case "linux-loongarch64-musl":
+      return `${pluginName}-loongarch64-unknown-linux-musl.zip`;
     case "windows-x86_64":
       return `${pluginName}-x86_64-pc-windows-msvc.zip`;
     case "windows-aarch64":
@@ -128,10 +131,19 @@ export interface CreateDprintOrgNpmPackagesOptions {
   version: string;
   /**
    * The npm package name for the main package (may be scoped,
-   * e.g. `@dprint/exec`). Per-platform sub-packages are named
-   * `<mainPackageName>-<platform>`.
+   * e.g. `@dprint/exec`).
    */
   mainPackageName: string;
+  /**
+   * Prefix prepended to each platform suffix to form a sub-package name.
+   * Defaults to `${mainPackageName}-`, producing names like
+   * `@dprint/exec-linux-x64-glibc`.
+   *
+   * Pass e.g. `"@dprint/"` to produce names like `@dprint/linux-x64-glibc`
+   * (the convention used by the dprint CLI itself, where sub-packages share
+   * the scope but not the basename of the main package).
+   */
+  subPackagePrefix?: string;
   /** Per-platform zips that will be packed as sub-packages. */
   platforms: { platform: Platform; zipFilePath: string }[];
   /** Directory in which to write the package subdirectories. */
@@ -158,15 +170,24 @@ export interface CreateDprintOrgNpmPackagesResult {
 /**
  * Creates the npm package directory structure for a dprint-org process plugin.
  *
- * For each platform it writes `<outDir>/<basename>-<platform>/`
- * containing `package.json` (with `os`/`cpu`/`libc` filters) and `plugin.zip`.
- * It also writes the main package at `<outDir>/<basename>/` whose
- * `plugin.json` references each sub-package via
- * `npm:<sub-package>@<version>/plugin.zip` and whose `package.json` lists
- * every sub-package as an `optionalDependencies` entry pinned to `version`.
+ * For each platform it writes
+ * `<outDir>/<sub-package-basename>/{package.json, plugin.zip}`. Sub-package
+ * `package.json` files carry `os`/`cpu`/`libc` filters using Node's canonical
+ * values (e.g. `linux` / `x64` / `glibc`) so npm only installs the matching
+ * one. The platform suffix matches the convention used by the dprint CLI:
+ * `darwin-x64`, `darwin-arm64`, `linux-x64-glibc`, `linux-x64-musl`,
+ * `linux-arm64-glibc`, `linux-arm64-musl`, `linux-riscv64-glibc`,
+ * `linux-riscv64-musl`, `linux-loong64-glibc`, `linux-loong64-musl`,
+ * `win32-x64`, `win32-arm64`.
  *
- * `basename` is the last `/`-separated segment of `mainPackageName`
- * (e.g. `@dprint/exec` → `exec`).
+ * It also writes the main package at
+ * `<outDir>/<main-package-basename>/{package.json, plugin.json}`. The
+ * `plugin.json` references each sub-package via
+ * `npm:<sub-package>@<version>/plugin.zip` and the `package.json` lists every
+ * sub-package as an `optionalDependencies` entry pinned to `version`.
+ *
+ * `basename` here is the last `/`-separated segment of the package name (e.g.
+ * `@dprint/exec` → `exec`).
  *
  * The caller is expected to `npm publish` each sub-package directory first,
  * then the main package directory.
@@ -181,20 +202,23 @@ export async function createDprintOrgNpmPackages(
 
   await Deno.mkdir(options.outDir, { recursive: true });
 
-  const basename = packageBasename(options.mainPackageName);
+  const subPackagePrefix = options.subPackagePrefix ?? `${options.mainPackageName}-`;
   const subPackageDirs: string[] = [];
   const optionalDependencies: Record<string, string> = {};
 
   for (const { platform, zipFilePath } of options.platforms) {
-    const subPackageName = `${options.mainPackageName}-${platform}`;
-    const subPackageDir = `${options.outDir}/${basename}-${platform}`;
+    const info = npmPlatformInfo(platform);
+    const subPackageName = `${subPackagePrefix}${info.suffix}`;
+    const subPackageDir = `${options.outDir}/${packageBasename(subPackageName)}`;
     await Deno.mkdir(subPackageDir, { recursive: true });
     await Deno.copyFile(zipFilePath, `${subPackageDir}/plugin.zip`);
     await writeJsonFile(`${subPackageDir}/package.json`, {
       ...options.packageJsonExtra,
       name: subPackageName,
       version: options.version,
-      ...npmPlatformFilters(platform),
+      os: info.os,
+      cpu: info.cpu,
+      ...(info.libc ? { libc: info.libc } : {}),
     });
     subPackageDirs.push(subPackageDir);
     optionalDependencies[subPackageName] = options.version;
@@ -206,7 +230,7 @@ export async function createDprintOrgNpmPackages(
     });
   }
 
-  const mainPackageDir = `${options.outDir}/${basename}`;
+  const mainPackageDir = `${options.outDir}/${packageBasename(options.mainPackageName)}`;
   await Deno.mkdir(mainPackageDir, { recursive: true });
   await builder.writeToPath(`${mainPackageDir}/plugin.json`);
   await writeJsonFile(`${mainPackageDir}/package.json`, {
@@ -266,32 +290,43 @@ function packageBasename(npmName: string): string {
   return slashIdx >= 0 ? npmName.substring(slashIdx + 1) : npmName;
 }
 
-function npmPlatformFilters(
-  platform: Platform,
-): { os: string[]; cpu: string[]; libc?: string[] } {
+interface NpmPlatformInfo {
+  /** Package-name suffix matching the dprint CLI convention. */
+  suffix: string;
+  /** Value of the npm `os` field. */
+  os: string[];
+  /** Value of the npm `cpu` field. */
+  cpu: string[];
+  /** Value of the npm `libc` field (omitted on darwin/win32). */
+  libc?: string[];
+}
+
+function npmPlatformInfo(platform: Platform): NpmPlatformInfo {
   switch (platform) {
     case "darwin-x86_64":
-      return { os: ["darwin"], cpu: ["x64"] };
+      return { suffix: "darwin-x64", os: ["darwin"], cpu: ["x64"] };
     case "darwin-aarch64":
-      return { os: ["darwin"], cpu: ["arm64"] };
+      return { suffix: "darwin-arm64", os: ["darwin"], cpu: ["arm64"] };
     case "linux-x86_64":
-      return { os: ["linux"], cpu: ["x64"], libc: ["glibc"] };
+      return { suffix: "linux-x64-glibc", os: ["linux"], cpu: ["x64"], libc: ["glibc"] };
     case "linux-x86_64-musl":
-      return { os: ["linux"], cpu: ["x64"], libc: ["musl"] };
+      return { suffix: "linux-x64-musl", os: ["linux"], cpu: ["x64"], libc: ["musl"] };
     case "linux-aarch64":
-      return { os: ["linux"], cpu: ["arm64"], libc: ["glibc"] };
+      return { suffix: "linux-arm64-glibc", os: ["linux"], cpu: ["arm64"], libc: ["glibc"] };
     case "linux-aarch64-musl":
-      return { os: ["linux"], cpu: ["arm64"], libc: ["musl"] };
+      return { suffix: "linux-arm64-musl", os: ["linux"], cpu: ["arm64"], libc: ["musl"] };
     case "linux-riscv64":
-      return { os: ["linux"], cpu: ["riscv64"], libc: ["glibc"] };
+      return { suffix: "linux-riscv64-glibc", os: ["linux"], cpu: ["riscv64"], libc: ["glibc"] };
     case "linux-riscv64-musl":
-      return { os: ["linux"], cpu: ["riscv64"], libc: ["musl"] };
+      return { suffix: "linux-riscv64-musl", os: ["linux"], cpu: ["riscv64"], libc: ["musl"] };
     case "linux-loongarch64":
-      return { os: ["linux"], cpu: ["loong64"] };
+      return { suffix: "linux-loong64-glibc", os: ["linux"], cpu: ["loong64"], libc: ["glibc"] };
+    case "linux-loongarch64-musl":
+      return { suffix: "linux-loong64-musl", os: ["linux"], cpu: ["loong64"], libc: ["musl"] };
     case "windows-x86_64":
-      return { os: ["win32"], cpu: ["x64"] };
+      return { suffix: "win32-x64", os: ["win32"], cpu: ["x64"] };
     case "windows-aarch64":
-      return { os: ["win32"], cpu: ["arm64"] };
+      return { suffix: "win32-arm64", os: ["win32"], cpu: ["arm64"] };
     default: {
       const _never: never = platform;
       throw new Error(`Not supported platform: ${platform}`);
