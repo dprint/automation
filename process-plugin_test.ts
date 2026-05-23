@@ -75,15 +75,15 @@ Deno.test("PluginFileBuilder.writeToPath writes outputText verbatim", async () =
 
 Deno.test("createDprintOrgNpmPackages: full layout for plugin convention", async () => {
   await withTempDir(async (root) => {
-    const linuxZip = `${root}/linux.zip`;
-    const darwinZip = `${root}/darwin.zip`;
-    const winZip = `${root}/win.zip`;
-    const linuxBytes = new TextEncoder().encode("linux zip content");
-    const darwinBytes = new TextEncoder().encode("darwin zip content");
-    const winBytes = new TextEncoder().encode("win zip content");
-    await Deno.writeFile(linuxZip, linuxBytes);
-    await Deno.writeFile(darwinZip, darwinBytes);
-    await Deno.writeFile(winZip, winBytes);
+    const linuxBinary = `${root}/dprint-plugin-exec-linux`;
+    const darwinBinary = `${root}/dprint-plugin-exec-darwin`;
+    const winBinary = `${root}/dprint-plugin-exec.exe`;
+    const linuxBytes = new TextEncoder().encode("linux binary content");
+    const darwinBytes = new TextEncoder().encode("darwin binary content");
+    const winBytes = new TextEncoder().encode("win binary content");
+    await Deno.writeFile(linuxBinary, linuxBytes);
+    await Deno.writeFile(darwinBinary, darwinBytes);
+    await Deno.writeFile(winBinary, winBytes);
 
     const outDir = `${root}/out`;
     const result = await createDprintOrgNpmPackages({
@@ -92,9 +92,9 @@ Deno.test("createDprintOrgNpmPackages: full layout for plugin convention", async
       mainPackageName: "@dprint/exec",
       outDir,
       platforms: [
-        { platform: "linux-x86_64", zipFilePath: linuxZip },
-        { platform: "darwin-aarch64", zipFilePath: darwinZip },
-        { platform: "windows-x86_64", zipFilePath: winZip },
+        { platform: "linux-x86_64", binaryPath: linuxBinary },
+        { platform: "darwin-aarch64", binaryPath: darwinBinary },
+        { platform: "windows-x86_64", binaryPath: winBinary },
       ],
     });
 
@@ -106,12 +106,12 @@ Deno.test("createDprintOrgNpmPackages: full layout for plugin convention", async
     ]);
 
     assertEquals(await listRelativeFiles(outDir), [
+      "exec-darwin-arm64/dprint-plugin-exec-darwin",
       "exec-darwin-arm64/package.json",
-      "exec-darwin-arm64/plugin.zip",
+      "exec-linux-x64-glibc/dprint-plugin-exec-linux",
       "exec-linux-x64-glibc/package.json",
-      "exec-linux-x64-glibc/plugin.zip",
+      "exec-win32-x64/dprint-plugin-exec.exe",
       "exec-win32-x64/package.json",
-      "exec-win32-x64/plugin.zip",
       "exec/package.json",
       "exec/plugin.json",
     ]);
@@ -137,15 +137,15 @@ Deno.test("createDprintOrgNpmPackages: full layout for plugin convention", async
         name: "dprint-plugin-exec",
         version: "1.2.3",
         "linux-x86_64": {
-          reference: "npm:@dprint/exec-linux-x64-glibc@1.2.3/plugin.zip",
+          reference: "npm:@dprint/exec-linux-x64-glibc@1.2.3/dprint-plugin-exec-linux",
           checksum: await getChecksum(linuxBytes),
         },
         "darwin-aarch64": {
-          reference: "npm:@dprint/exec-darwin-arm64@1.2.3/plugin.zip",
+          reference: "npm:@dprint/exec-darwin-arm64@1.2.3/dprint-plugin-exec-darwin",
           checksum: await getChecksum(darwinBytes),
         },
         "windows-x86_64": {
-          reference: "npm:@dprint/exec-win32-x64@1.2.3/plugin.zip",
+          reference: "npm:@dprint/exec-win32-x64@1.2.3/dprint-plugin-exec.exe",
           checksum: await getChecksum(winBytes),
         },
       },
@@ -188,17 +188,56 @@ Deno.test("createDprintOrgNpmPackages: full layout for plugin convention", async
       },
     );
 
+    // binary is copied verbatim into the sub-package
     assertEquals(
-      await Deno.readFile(`${outDir}/exec-linux-x64-glibc/plugin.zip`),
+      await Deno.readFile(`${outDir}/exec-linux-x64-glibc/dprint-plugin-exec-linux`),
       linuxBytes,
     );
+    assertEquals(
+      await Deno.readFile(`${outDir}/exec-win32-x64/dprint-plugin-exec.exe`),
+      winBytes,
+    );
+  });
+});
+
+Deno.test("createDprintOrgNpmPackages: name and version are the first keys in package.json", async () => {
+  await withTempDir(async (root) => {
+    const binary = `${root}/dprint-plugin-exec`;
+    await Deno.writeFile(binary, new Uint8Array([0]));
+
+    const outDir = `${root}/out`;
+    await createDprintOrgNpmPackages({
+      pluginName: "dprint-plugin-exec",
+      version: "1.0.0",
+      mainPackageName: "@dprint/exec",
+      outDir,
+      platforms: [{ platform: "linux-x86_64", binaryPath: binary }],
+      packageJsonExtra: {
+        description: "desc",
+        license: "MIT",
+      },
+    });
+
+    const mainKeys = Object.keys(
+      JSON.parse(await Deno.readTextFile(`${outDir}/exec/package.json`)),
+    );
+    assertEquals(mainKeys.slice(0, 2), ["name", "version"]);
+
+    const subKeys = Object.keys(
+      JSON.parse(
+        await Deno.readTextFile(`${outDir}/exec-linux-x64-glibc/package.json`),
+      ),
+    );
+    assertEquals(subKeys.slice(0, 2), ["name", "version"]);
   });
 });
 
 Deno.test("createDprintOrgNpmPackages: subPackagePrefix produces CLI-style names", async () => {
   await withTempDir(async (root) => {
-    const zip = `${root}/z.zip`;
-    await Deno.writeFile(zip, new Uint8Array([1, 2, 3]));
+    const unixBinary = `${root}/dprint`;
+    const winBinary = `${root}/dprint.exe`;
+    await Deno.writeFile(unixBinary, new Uint8Array([1, 2, 3]));
+    await Deno.writeFile(winBinary, new Uint8Array([1, 2, 3]));
 
     const outDir = `${root}/out`;
     const result = await createDprintOrgNpmPackages({
@@ -208,8 +247,8 @@ Deno.test("createDprintOrgNpmPackages: subPackagePrefix produces CLI-style names
       subPackagePrefix: "@dprint/",
       outDir,
       platforms: [
-        { platform: "linux-x86_64", zipFilePath: zip },
-        { platform: "windows-x86_64", zipFilePath: zip },
+        { platform: "linux-x86_64", binaryPath: unixBinary },
+        { platform: "windows-x86_64", binaryPath: winBinary },
       ],
     });
 
@@ -240,19 +279,19 @@ Deno.test("createDprintOrgNpmPackages: subPackagePrefix produces CLI-style names
     );
     assertEquals(
       pluginJson["linux-x86_64"].reference,
-      "npm:@dprint/linux-x64-glibc@0.54.0/plugin.zip",
+      "npm:@dprint/linux-x64-glibc@0.54.0/dprint",
     );
     assertEquals(
       pluginJson["windows-x86_64"].reference,
-      "npm:@dprint/win32-x64@0.54.0/plugin.zip",
+      "npm:@dprint/win32-x64@0.54.0/dprint.exe",
     );
   });
 });
 
 Deno.test("createDprintOrgNpmPackages: packageJsonExtra merges but managed fields win", async () => {
   await withTempDir(async (root) => {
-    const zip = `${root}/z.zip`;
-    await Deno.writeFile(zip, new Uint8Array([0]));
+    const binary = `${root}/p`;
+    await Deno.writeFile(binary, new Uint8Array([0]));
 
     const outDir = `${root}/out`;
     await createDprintOrgNpmPackages({
@@ -263,7 +302,7 @@ Deno.test("createDprintOrgNpmPackages: packageJsonExtra merges but managed field
       platforms: [
         // darwin has no libc — managed override must drop a stray
         // libc value supplied via packageJsonExtra.
-        { platform: "darwin-aarch64", zipFilePath: zip },
+        { platform: "darwin-aarch64", binaryPath: binary },
       ],
       packageJsonExtra: {
         description: "desc",
