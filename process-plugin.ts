@@ -162,8 +162,18 @@ export interface CreateDprintOrgNpmPackagesOptions {
    * into the sub-package under its basename, and the main package's
    * `plugin.json` references it via `npm:<sub>@<version>/<basename>`.
    * On Unix, the copied file is marked executable (mode 0o755).
+   *
+   * For plugins whose executable can't run standalone (e.g. self-contained
+   * .NET apps that ship with side-loaded DLLs), set `packageContents` to
+   * the directory whose contents should be copied into the sub-package.
+   * `binaryPath` must be a file inside that directory; everything else in
+   * the directory is copied verbatim, preserving relative paths.
    */
-  platforms: { platform: Platform; binaryPath: string }[];
+  platforms: {
+    platform: Platform;
+    binaryPath: string;
+    packageContents?: string;
+  }[];
   /** Directory in which to write the package subdirectories. */
   outDir: string;
   /**
@@ -251,7 +261,7 @@ export async function createDprintOrgNpmPackages(
   }
   const pending: PendingSubPackage[] = [];
 
-  for (const { platform, binaryPath } of options.platforms) {
+  for (const { platform, binaryPath, packageContents } of options.platforms) {
     const info = npmPlatformInfo(platform);
     const subPackageName = `${subPackagePrefix}${info.suffix}`;
     const subPackageDir = `${options.outDir}/${packageBasename(subPackageName)}`;
@@ -259,7 +269,17 @@ export async function createDprintOrgNpmPackages(
     const destBinaryPath = `${subPackageDir}/${binaryName}`;
 
     await Deno.mkdir(subPackageDir, { recursive: true });
-    await Deno.copyFile(binaryPath, destBinaryPath);
+    if (packageContents != null) {
+      const binaryRelInDir = relativePathInside(packageContents, binaryPath);
+      if (binaryRelInDir == null) {
+        throw new Error(
+          `binaryPath ${binaryPath} must be inside packageContents ${packageContents}`,
+        );
+      }
+      await copyDirContents(packageContents, subPackageDir);
+    } else {
+      await Deno.copyFile(binaryPath, destBinaryPath);
+    }
     // mark the destination executable on Unix; no-op on Windows (the platform
     // has no concept and Deno.chmod throws there).
     if (Deno.build.os !== "windows") {
@@ -512,4 +532,39 @@ function basenameOf(path: string): string {
   // accept both / and \ for cross-platform input paths
   const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
   return slash >= 0 ? path.substring(slash + 1) : path;
+}
+
+/**
+ * Recursively copies the contents of `src` into `dest`. `dest` must already
+ * exist. Sub-directories are created as needed. File modes are preserved on
+ * Unix (so e.g. a pre-existing executable bit survives the copy); on Windows
+ * the OS doesn't carry modes so npm pack will record 0644.
+ */
+async function copyDirContents(src: string, dest: string): Promise<void> {
+  for await (const entry of Deno.readDir(src)) {
+    const srcPath = `${src}/${entry.name}`;
+    const destPath = `${dest}/${entry.name}`;
+    if (entry.isDirectory) {
+      await Deno.mkdir(destPath, { recursive: true });
+      await copyDirContents(srcPath, destPath);
+    } else {
+      await Deno.copyFile(srcPath, destPath);
+    }
+  }
+}
+
+/**
+ * Returns `child` expressed relative to `parent` using forward slashes, or
+ * `null` if `child` is not inside `parent`. Both paths are normalized to use
+ * forward slashes first so this works regardless of input separator style.
+ */
+function relativePathInside(parent: string, child: string): string | null {
+  const p = normalizeSlashes(parent).replace(/\/+$/, "") + "/";
+  const c = normalizeSlashes(child);
+  if (!c.startsWith(p)) return null;
+  return c.substring(p.length);
+}
+
+function normalizeSlashes(path: string): string {
+  return path.replaceAll("\\", "/");
 }
