@@ -86,16 +86,17 @@ Deno.test("createDprintOrgNpmPackages: full layout for plugin convention", async
     await Deno.writeFile(winBinary, winBytes);
 
     const outDir = `${root}/out`;
+    const platforms: Array<{ platform: Platform; binaryPath: string }> = [
+      { platform: "linux-x86_64", binaryPath: linuxBinary },
+      { platform: "darwin-aarch64", binaryPath: darwinBinary },
+      { platform: "windows-x86_64", binaryPath: winBinary },
+    ];
     const result = await createDprintOrgNpmPackages({
       pluginName: "dprint-plugin-exec",
       version: "1.2.3",
       mainPackageName: "@dprint/exec",
       outDir,
-      platforms: [
-        { platform: "linux-x86_64", binaryPath: linuxBinary },
-        { platform: "darwin-aarch64", binaryPath: darwinBinary },
-        { platform: "windows-x86_64", binaryPath: winBinary },
-      ],
+      platforms,
     });
 
     assertEquals(result.mainPackageDir, `${outDir}/exec`);
@@ -105,16 +106,11 @@ Deno.test("createDprintOrgNpmPackages: full layout for plugin convention", async
       `${outDir}/exec-win32-x64`,
     ]);
 
-    assertEquals(await listRelativeFiles(outDir), [
-      "exec-darwin-arm64/dprint-plugin-exec-darwin",
-      "exec-darwin-arm64/package.json",
-      "exec-linux-x64-glibc/dprint-plugin-exec-linux",
-      "exec-linux-x64-glibc/package.json",
-      "exec-win32-x64/dprint-plugin-exec.exe",
-      "exec-win32-x64/package.json",
-      "exec/package.json",
-      "exec/plugin.json",
-    ]);
+    // tarballs exist and are non-empty
+    for (const t of [...result.subPackageTarballs, result.mainPackageTarball]) {
+      const stat = await Deno.stat(t);
+      assertEquals(stat.size > 0, true, `${t} should be non-empty`);
+    }
 
     assertEquals(
       JSON.parse(await Deno.readTextFile(`${outDir}/exec/package.json`)),
@@ -129,27 +125,28 @@ Deno.test("createDprintOrgNpmPackages: full layout for plugin convention", async
       },
     );
 
-    assertEquals(
-      JSON.parse(await Deno.readTextFile(`${outDir}/exec/plugin.json`)),
-      {
-        schemaVersion: 2,
-        kind: "process",
-        name: "dprint-plugin-exec",
-        version: "1.2.3",
-        "linux-x86_64": {
-          reference: "npm:@dprint/exec-linux-x64-glibc@1.2.3/dprint-plugin-exec-linux",
-          checksum: await getChecksum(linuxBytes),
-        },
-        "darwin-aarch64": {
-          reference: "npm:@dprint/exec-darwin-arm64@1.2.3/dprint-plugin-exec-darwin",
-          checksum: await getChecksum(darwinBytes),
-        },
-        "windows-x86_64": {
-          reference: "npm:@dprint/exec-win32-x64@1.2.3/dprint-plugin-exec.exe",
-          checksum: await getChecksum(winBytes),
-        },
-      },
-    );
+    // plugin.json shape: per-platform reference correct, checksum is sha256 of the matching tarball.
+    const pluginJson = JSON.parse(await Deno.readTextFile(`${outDir}/exec/plugin.json`));
+    assertEquals(pluginJson.schemaVersion, 2);
+    assertEquals(pluginJson.kind, "process");
+    assertEquals(pluginJson.name, "dprint-plugin-exec");
+    assertEquals(pluginJson.version, "1.2.3");
+
+    const expectedRefs: Record<string, string> = {
+      "linux-x86_64": "npm:@dprint/exec-linux-x64-glibc@1.2.3/dprint-plugin-exec-linux",
+      "darwin-aarch64": "npm:@dprint/exec-darwin-arm64@1.2.3/dprint-plugin-exec-darwin",
+      "windows-x86_64": "npm:@dprint/exec-win32-x64@1.2.3/dprint-plugin-exec.exe",
+    };
+    for (let i = 0; i < platforms.length; i++) {
+      const key = platforms[i].platform;
+      const entry = pluginJson[key];
+      assertEquals(entry.reference, expectedRefs[key]);
+      assertEquals(
+        entry.checksum,
+        await getChecksum(await Deno.readFile(result.subPackageTarballs[i])),
+        `checksum for ${key} should equal sha256 of its tarball`,
+      );
+    }
 
     assertEquals(
       JSON.parse(

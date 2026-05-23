@@ -106,6 +106,18 @@ export class PluginFileBuilder {
     };
   }
 
+  /**
+   * Adds a platform entry with a precomputed checksum. Use this when the
+   * checksum doesn't correspond to a single file on disk (e.g. it covers
+   * a npm tarball that has already been packed and hashed).
+   */
+  addPlatformEntry(options: { platform: Platform; reference: string; checksum: string }) {
+    this.#output[options.platform] = {
+      "reference": options.reference,
+      "checksum": options.checksum,
+    };
+  }
+
   async writeToPath(filePath: string) {
     const text = this.outputText();
     const checksum = await this.outputTextChecksum();
@@ -164,13 +176,24 @@ export interface CreateDprintOrgNpmPackagesOptions {
 
 /** Result of {@link createDprintOrgNpmPackages}. */
 export interface CreateDprintOrgNpmPackagesResult {
-  /** Directory containing the main package (run `npm publish` here last). */
+  /** Directory containing the main package. */
   mainPackageDir: string;
   /**
-   * Directories containing the per-platform sub-packages. Publish these
-   * before the main package so its `optionalDependencies` resolve.
+   * Tarball for the main package. Publish this last with
+   * `npm publish <path>` so npm uploads the exact bytes whose hash users
+   * verify, rather than re-packing and risking a hash mismatch.
    */
+  mainPackageTarball: string;
+  /** Directories containing the per-platform sub-packages. */
   subPackageDirs: string[];
+  /**
+   * Tarballs for each per-platform sub-package, in the same order as
+   * {@link subPackageDirs}. The SHA-256 of each tarball is the value
+   * stored in the main package's `plugin.json` per-platform `checksum`
+   * field, so publishing the same tarball ensures dprint's verification
+   * succeeds. Publish these before {@link mainPackageTarball}.
+   */
+  subPackageTarballs: string[];
 }
 
 /**
@@ -188,31 +211,45 @@ export interface CreateDprintOrgNpmPackagesResult {
  * `linux-arm64-musl`, `linux-riscv64-glibc`, `linux-riscv64-musl`,
  * `linux-loong64-glibc`, `linux-loong64-musl`, `win32-x64`, `win32-arm64`.
  *
- * It also writes the main package at
- * `<outDir>/<main-package-basename>/{package.json, plugin.json}`. The
- * `plugin.json` references each sub-package via
+ * After each sub-package dir is written, `npm pack` is run inside it to
+ * produce a `.tgz` next to the dir; the SHA-256 of that tarball becomes
+ * the per-platform `checksum` in the main package's `plugin.json` —
+ * matching dprint's per-platform tarball-hash verification.
+ *
+ * Finally the main package is written to
+ * `<outDir>/<main-package-basename>/{package.json, plugin.json}` and packed
+ * the same way. The `plugin.json` references each sub-package via
  * `npm:<sub-package>@<version>/<binary>` and the `package.json` lists every
  * sub-package as an `optionalDependencies` entry pinned to `version`.
  *
  * `basename` here is the last `/`-separated segment of the package name (e.g.
  * `@dprint/exec` → `exec`).
  *
- * The caller is expected to `npm publish` each sub-package directory first,
- * then the main package directory.
+ * The caller is expected to `npm publish <tarball>` each sub-package
+ * tarball first, then the main package tarball. Publishing the tarballs
+ * (rather than the directories) guarantees the published bytes match
+ * what was hashed.
+ *
+ * `npm` must be on `PATH` when calling this function.
  */
 export async function createDprintOrgNpmPackages(
   options: CreateDprintOrgNpmPackagesOptions,
 ): Promise<CreateDprintOrgNpmPackagesResult> {
-  const builder = new PluginFileBuilder({
-    name: options.pluginName,
-    version: options.version,
-  });
-
   await Deno.mkdir(options.outDir, { recursive: true });
 
   const subPackagePrefix = options.subPackagePrefix ?? `${options.mainPackageName}-`;
   const subPackageDirs: string[] = [];
+  const subPackageTarballs: string[] = [];
   const optionalDependencies: Record<string, string> = {};
+
+  // pass 1: write each sub-package directory.
+  interface PendingSubPackage {
+    platform: Platform;
+    subPackageName: string;
+    subPackageDir: string;
+    binaryName: string;
+  }
+  const pending: PendingSubPackage[] = [];
 
   for (const { platform, binaryPath } of options.platforms) {
     const info = npmPlatformInfo(platform);
@@ -238,14 +275,27 @@ export async function createDprintOrgNpmPackages(
     });
     subPackageDirs.push(subPackageDir);
     optionalDependencies[subPackageName] = options.version;
+    pending.push({ platform, subPackageName, subPackageDir, binaryName });
+  }
 
-    await builder.addPlatform({
+  // pass 2: npm pack each sub-package and hash its tarball.
+  const builder = new PluginFileBuilder({
+    name: options.pluginName,
+    version: options.version,
+  });
+  for (const { platform, subPackageName, subPackageDir, binaryName } of pending) {
+    const tarball = await npmPack(subPackageDir, options.outDir);
+    subPackageTarballs.push(tarball);
+    const checksum = await getChecksum(await Deno.readFile(tarball));
+    console.log(`${tarball}: ${checksum}`);
+    builder.addPlatformEntry({
       platform,
-      zipFilePath: binaryPath,
-      zipUrl: `npm:${subPackageName}@${options.version}/${binaryName}`,
+      reference: `npm:${subPackageName}@${options.version}/${binaryName}`,
+      checksum,
     });
   }
 
+  // pass 3: write the main package, then pack it.
   const mainPackageDir = `${options.outDir}/${packageBasename(options.mainPackageName)}`;
   await Deno.mkdir(mainPackageDir, { recursive: true });
   await builder.writeToPath(`${mainPackageDir}/plugin.json`);
@@ -255,8 +305,9 @@ export async function createDprintOrgNpmPackages(
     extra: options.packageJsonExtra,
     optionalDependencies,
   });
+  const mainPackageTarball = await npmPack(mainPackageDir, options.outDir);
 
-  return { mainPackageDir, subPackageDirs };
+  return { mainPackageDir, mainPackageTarball, subPackageDirs, subPackageTarballs };
 }
 
 /** Creates a process plugin for the dprint GitHub organization. */
@@ -426,6 +477,35 @@ function buildPackageJson(
 
 async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
   await Deno.writeTextFile(filePath, JSON.stringify(value, undefined, 2) + "\n");
+}
+
+/**
+ * Runs `npm pack` against `packageDir` and writes the tarball into
+ * `destDir`. Returns the absolute path to the .tgz. Requires `npm` on PATH.
+ */
+async function npmPack(packageDir: string, destDir: string): Promise<string> {
+  const out = await new Deno.Command("npm", {
+    args: ["pack", "--json", "--pack-destination", destDir, packageDir],
+    stdout: "piped",
+    stderr: "piped",
+  }).output().catch((err: unknown) => {
+    if (err instanceof Deno.errors.NotFound) {
+      throw new Error("createDprintOrgNpmPackages requires `npm` on PATH (used for `npm pack`).");
+    }
+    throw err;
+  });
+  if (!out.success) {
+    throw new Error(
+      `npm pack failed for ${packageDir}:\n${new TextDecoder().decode(out.stderr)}`,
+    );
+  }
+  const parsed = JSON.parse(new TextDecoder().decode(out.stdout)) as Array<{
+    filename: string;
+  }>;
+  if (parsed.length !== 1 || !parsed[0].filename) {
+    throw new Error(`Unexpected npm pack JSON output for ${packageDir}: ${new TextDecoder().decode(out.stdout)}`);
+  }
+  return `${destDir}/${parsed[0].filename}`;
 }
 
 function basenameOf(path: string): string {
