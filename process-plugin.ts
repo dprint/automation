@@ -144,8 +144,14 @@ export interface CreateDprintOrgNpmPackagesOptions {
    * the scope but not the basename of the main package).
    */
   subPackagePrefix?: string;
-  /** Per-platform zips that will be packed as sub-packages. */
-  platforms: { platform: Platform; zipFilePath: string }[];
+  /**
+   * Per-platform binaries that will be packed as sub-packages. Each
+   * `binaryPath` points to the raw executable on disk — it's copied
+   * into the sub-package under its basename, and the main package's
+   * `plugin.json` references it via `npm:<sub>@<version>/<basename>`.
+   * On Unix, the copied file is marked executable (mode 0o755).
+   */
+  platforms: { platform: Platform; binaryPath: string }[];
   /** Directory in which to write the package subdirectories. */
   outDir: string;
   /**
@@ -171,19 +177,21 @@ export interface CreateDprintOrgNpmPackagesResult {
  * Creates the npm package directory structure for a dprint-org process plugin.
  *
  * For each platform it writes
- * `<outDir>/<sub-package-basename>/{package.json, plugin.zip}`. Sub-package
- * `package.json` files carry `os`/`cpu`/`libc` filters using Node's canonical
- * values (e.g. `linux` / `x64` / `glibc`) so npm only installs the matching
- * one. The platform suffix matches the convention used by the dprint CLI:
- * `darwin-x64`, `darwin-arm64`, `linux-x64-glibc`, `linux-x64-musl`,
- * `linux-arm64-glibc`, `linux-arm64-musl`, `linux-riscv64-glibc`,
- * `linux-riscv64-musl`, `linux-loong64-glibc`, `linux-loong64-musl`,
- * `win32-x64`, `win32-arm64`.
+ * `<outDir>/<sub-package-basename>/{package.json, <binary>}`, where `<binary>`
+ * is the basename of the input `binaryPath` (e.g. `dprint-plugin-exec` or
+ * `dprint-plugin-exec.exe`). The binary is copied as-is and marked executable
+ * (mode 0o755) on Unix. Sub-package `package.json` files carry `os`/`cpu`/`libc`
+ * filters using Node's canonical values (e.g. `linux` / `x64` / `glibc`) so
+ * npm only installs the matching one. The platform suffix matches the
+ * convention used by the dprint CLI: `darwin-x64`, `darwin-arm64`,
+ * `linux-x64-glibc`, `linux-x64-musl`, `linux-arm64-glibc`,
+ * `linux-arm64-musl`, `linux-riscv64-glibc`, `linux-riscv64-musl`,
+ * `linux-loong64-glibc`, `linux-loong64-musl`, `win32-x64`, `win32-arm64`.
  *
  * It also writes the main package at
  * `<outDir>/<main-package-basename>/{package.json, plugin.json}`. The
  * `plugin.json` references each sub-package via
- * `npm:<sub-package>@<version>/plugin.zip` and the `package.json` lists every
+ * `npm:<sub-package>@<version>/<binary>` and the `package.json` lists every
  * sub-package as an `optionalDependencies` entry pinned to `version`.
  *
  * `basename` here is the last `/`-separated segment of the package name (e.g.
@@ -206,20 +214,26 @@ export async function createDprintOrgNpmPackages(
   const subPackageDirs: string[] = [];
   const optionalDependencies: Record<string, string> = {};
 
-  for (const { platform, zipFilePath } of options.platforms) {
+  for (const { platform, binaryPath } of options.platforms) {
     const info = npmPlatformInfo(platform);
     const subPackageName = `${subPackagePrefix}${info.suffix}`;
     const subPackageDir = `${options.outDir}/${packageBasename(subPackageName)}`;
+    const binaryName = basenameOf(binaryPath);
+    const destBinaryPath = `${subPackageDir}/${binaryName}`;
+
     await Deno.mkdir(subPackageDir, { recursive: true });
-    await Deno.copyFile(zipFilePath, `${subPackageDir}/plugin.zip`);
-    await writeJsonFile(`${subPackageDir}/package.json`, {
-      ...options.packageJsonExtra,
+    await Deno.copyFile(binaryPath, destBinaryPath);
+    // mark the destination executable on Unix; no-op on Windows (the platform
+    // has no concept and Deno.chmod throws there).
+    if (Deno.build.os !== "windows") {
+      await Deno.chmod(destBinaryPath, 0o755);
+    }
+    await writeSubPackageJson(`${subPackageDir}/package.json`, {
       name: subPackageName,
       version: options.version,
+      extra: options.packageJsonExtra,
       os: info.os,
       cpu: info.cpu,
-      // undefined keys are dropped by JSON.stringify, so this also overrides
-      // any `libc` field provided via packageJsonExtra for darwin/win32.
       libc: info.libc,
     });
     subPackageDirs.push(subPackageDir);
@@ -227,18 +241,18 @@ export async function createDprintOrgNpmPackages(
 
     await builder.addPlatform({
       platform,
-      zipFilePath,
-      zipUrl: `npm:${subPackageName}@${options.version}/plugin.zip`,
+      zipFilePath: binaryPath,
+      zipUrl: `npm:${subPackageName}@${options.version}/${binaryName}`,
     });
   }
 
   const mainPackageDir = `${options.outDir}/${packageBasename(options.mainPackageName)}`;
   await Deno.mkdir(mainPackageDir, { recursive: true });
   await builder.writeToPath(`${mainPackageDir}/plugin.json`);
-  await writeJsonFile(`${mainPackageDir}/package.json`, {
-    ...options.packageJsonExtra,
+  await writeMainPackageJson(`${mainPackageDir}/package.json`, {
     name: options.mainPackageName,
     version: options.version,
+    extra: options.packageJsonExtra,
     optionalDependencies,
   });
 
@@ -336,6 +350,86 @@ function npmPlatformInfo(platform: Platform): NpmPlatformInfo {
   }
 }
 
+async function writeSubPackageJson(
+  filePath: string,
+  fields: {
+    name: string;
+    version: string;
+    extra: Record<string, unknown> | undefined;
+    os: string[];
+    cpu: string[];
+    libc: string[] | undefined;
+  },
+): Promise<void> {
+  await writeJsonFile(
+    filePath,
+    buildPackageJson(
+      { name: fields.name, version: fields.version },
+      fields.extra,
+      { os: fields.os, cpu: fields.cpu, libc: fields.libc },
+    ),
+  );
+}
+
+async function writeMainPackageJson(
+  filePath: string,
+  fields: {
+    name: string;
+    version: string;
+    extra: Record<string, unknown> | undefined;
+    optionalDependencies: Record<string, string>;
+  },
+): Promise<void> {
+  await writeJsonFile(
+    filePath,
+    buildPackageJson(
+      { name: fields.name, version: fields.version },
+      fields.extra,
+      { optionalDependencies: fields.optionalDependencies },
+    ),
+  );
+}
+
+/**
+ * Builds a package.json object with `name` and `version` at the top, then
+ * the caller-supplied extras, then any trailing managed fields (os, cpu,
+ * libc, optionalDependencies). Extras' attempts to override managed fields
+ * are silently dropped.
+ */
+function buildPackageJson(
+  head: { name: string; version: string },
+  extra: Record<string, unknown> | undefined,
+  trailing: Record<string, unknown>,
+): Record<string, unknown> {
+  const managedKeys = new Set([
+    "name",
+    "version",
+    ...Object.keys(trailing),
+  ]);
+  const result: Record<string, unknown> = {
+    name: head.name,
+    version: head.version,
+  };
+  if (extra != null) {
+    for (const [k, v] of Object.entries(extra)) {
+      if (managedKeys.has(k)) continue;
+      result[k] = v;
+    }
+  }
+  for (const [k, v] of Object.entries(trailing)) {
+    // undefined values are dropped by JSON.stringify, so this still
+    // suppresses e.g. `libc` on platforms that don't need it.
+    result[k] = v;
+  }
+  return result;
+}
+
 async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
   await Deno.writeTextFile(filePath, JSON.stringify(value, undefined, 2) + "\n");
+}
+
+function basenameOf(path: string): string {
+  // accept both / and \ for cross-platform input paths
+  const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return slash >= 0 ? path.substring(slash + 1) : path;
 }
