@@ -218,7 +218,9 @@ export async function createDprintOrgNpmPackages(
       version: options.version,
       os: info.os,
       cpu: info.cpu,
-      ...(info.libc ? { libc: info.libc } : {}),
+      // undefined keys are dropped by JSON.stringify, so this also overrides
+      // any `libc` field provided via packageJsonExtra for darwin/win32.
+      libc: info.libc,
     });
     subPackageDirs.push(subPackageDir);
     optionalDependencies[subPackageName] = options.version;
