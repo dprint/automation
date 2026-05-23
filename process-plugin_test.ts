@@ -229,6 +229,79 @@ Deno.test("createDprintOrgNpmPackages: name and version are the first keys in pa
   });
 });
 
+Deno.test("createDprintOrgNpmPackages: packageContents ships the whole dir", async () => {
+  await withTempDir(async (root) => {
+    // simulate a self-contained .NET app layout: an executable plus side
+    // files (including in a sub-dir) that must travel together.
+    const appDir = `${root}/app`;
+    await Deno.mkdir(`${appDir}/runtimes`, { recursive: true });
+    const binaryPath = `${appDir}/dprint-plugin-roslyn`;
+    await Deno.writeFile(binaryPath, new TextEncoder().encode("bin"));
+    await Deno.writeFile(`${appDir}/Microsoft.CodeAnalysis.dll`, new TextEncoder().encode("dll1"));
+    await Deno.writeFile(`${appDir}/Microsoft.CSharp.dll`, new TextEncoder().encode("dll2"));
+    await Deno.writeFile(`${appDir}/runtimes/libSystem.Native.so`, new TextEncoder().encode("so"));
+
+    const outDir = `${root}/out`;
+    const result = await createDprintOrgNpmPackages({
+      pluginName: "dprint-plugin-roslyn",
+      version: "1.0.0",
+      mainPackageName: "@dprint/roslyn",
+      outDir,
+      platforms: [{ platform: "linux-x86_64", binaryPath, packageContents: appDir }],
+    });
+
+    // every file from appDir is now in the sub-package
+    const subDir = `${outDir}/roslyn-linux-x64-glibc`;
+    assertEquals(await Deno.readTextFile(`${subDir}/dprint-plugin-roslyn`), "bin");
+    assertEquals(await Deno.readTextFile(`${subDir}/Microsoft.CodeAnalysis.dll`), "dll1");
+    assertEquals(await Deno.readTextFile(`${subDir}/Microsoft.CSharp.dll`), "dll2");
+    assertEquals(await Deno.readTextFile(`${subDir}/runtimes/libSystem.Native.so`), "so");
+
+    // plugin.json's reference still names the executable; checksum is the
+    // tarball's sha256, which captures every file we just shipped.
+    const pluginJson = JSON.parse(await Deno.readTextFile(`${outDir}/roslyn/plugin.json`));
+    assertEquals(
+      pluginJson["linux-x86_64"].reference,
+      "npm:@dprint/roslyn-linux-x64-glibc@1.0.0/dprint-plugin-roslyn",
+    );
+    assertEquals(
+      pluginJson["linux-x86_64"].checksum,
+      await getChecksum(await Deno.readFile(result.subPackageTarballs[0])),
+    );
+  });
+});
+
+Deno.test("createDprintOrgNpmPackages: packageContents rejects binaryPath outside the dir", async () => {
+  await withTempDir(async (root) => {
+    await Deno.mkdir(`${root}/app`);
+    await Deno.writeFile(`${root}/app/inside`, new Uint8Array([1]));
+    const outsideBinary = `${root}/outside`;
+    await Deno.writeFile(outsideBinary, new Uint8Array([1]));
+
+    let threw = false;
+    try {
+      await createDprintOrgNpmPackages({
+        pluginName: "p",
+        version: "1.0.0",
+        mainPackageName: "@x/p",
+        outDir: `${root}/out`,
+        platforms: [{
+          platform: "linux-x86_64",
+          binaryPath: outsideBinary,
+          packageContents: `${root}/app`,
+        }],
+      });
+    } catch (err) {
+      threw = true;
+      assertEquals(
+        (err as Error).message.includes("must be inside packageContents"),
+        true,
+      );
+    }
+    assertEquals(threw, true, "expected an error");
+  });
+});
+
 Deno.test("createDprintOrgNpmPackages: subPackagePrefix produces CLI-style names", async () => {
   await withTempDir(async (root) => {
     const unixBinary = `${root}/dprint`;
