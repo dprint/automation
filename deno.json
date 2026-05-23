@@ -9,6 +9,11 @@
     ".": "./mod.ts",
     "./tasks/publish-release": "./tasks/publish-release.ts"
   },
+  "lint": {
+    "rules": {
+      "exclude": ["no-explicit-any"]
+    }
+  },
   "test": {
     "permissions": {
       "all": true
