@@ -2,10 +2,18 @@
   "name": "@dprint/automation",
   "imports": {
     "dax": "jsr:@david/dax@0.45.0",
-    "semver": "jsr:@std/semver@1"
+    "semver": "jsr:@std/semver@1",
+    "@std/assert": "jsr:@std/assert@1"
   },
   "exports": {
     ".": "./mod.ts",
     "./tasks/publish-release": "./tasks/publish-release.ts"
+  },
+  "test": {
+    "permissions": {
+      "all": true
+    },
+    "sanitizeOps": true,
+    "sanitizeResources": true
   }
 }
