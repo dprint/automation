@@ -11,6 +11,8 @@ export type Platform =
   | "linux-riscv64-musl"
   | "linux-loongarch64"
   | "linux-loongarch64-musl"
+  | "linux-powerpc64le"
+  | "linux-powerpc64le-musl"
   | "windows-x86_64"
   | "windows-aarch64";
 
@@ -36,6 +38,10 @@ export function getStandardZipFileName(pluginName: string, platform: Platform): 
       return `${pluginName}-loongarch64-unknown-linux-gnu.zip`;
     case "linux-loongarch64-musl":
       return `${pluginName}-loongarch64-unknown-linux-musl.zip`;
+    case "linux-powerpc64le":
+      return `${pluginName}-powerpc64le-unknown-linux-gnu.zip`;
+    case "linux-powerpc64le-musl":
+      return `${pluginName}-powerpc64le-unknown-linux-musl.zip`;
     case "windows-x86_64":
       return `${pluginName}-x86_64-pc-windows-msvc.zip`;
     case "windows-aarch64":
@@ -219,7 +225,8 @@ export interface CreateDprintOrgNpmPackagesResult {
  * convention used by the dprint CLI: `darwin-x64`, `darwin-arm64`,
  * `linux-x64-glibc`, `linux-x64-musl`, `linux-arm64-glibc`,
  * `linux-arm64-musl`, `linux-riscv64-glibc`, `linux-riscv64-musl`,
- * `linux-loong64-glibc`, `linux-loong64-musl`, `win32-x64`, `win32-arm64`.
+ * `linux-loong64-glibc`, `linux-loong64-musl`, `linux-ppc64-glibc`,
+ * `linux-ppc64-musl`, `win32-x64`, `win32-arm64`.
  *
  * After each sub-package dir is written, `npm pack` is run inside it to
  * produce a `.tgz` next to the dir; the SHA-256 of that tarball becomes
@@ -410,6 +417,10 @@ function npmPlatformInfo(platform: Platform): NpmPlatformInfo {
       return { suffix: "linux-loong64-glibc", os: ["linux"], cpu: ["loong64"], libc: ["glibc"] };
     case "linux-loongarch64-musl":
       return { suffix: "linux-loong64-musl", os: ["linux"], cpu: ["loong64"], libc: ["musl"] };
+    case "linux-powerpc64le":
+      return { suffix: "linux-ppc64-glibc", os: ["linux"], cpu: ["ppc64"], libc: ["glibc"] };
+    case "linux-powerpc64le-musl":
+      return { suffix: "linux-ppc64-musl", os: ["linux"], cpu: ["ppc64"], libc: ["musl"] };
     case "windows-x86_64":
       return { suffix: "win32-x64", os: ["win32"], cpu: ["x64"] };
     case "windows-aarch64":
