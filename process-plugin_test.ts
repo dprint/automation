@@ -21,6 +21,8 @@ Deno.test("getStandardZipFileName maps every Platform variant", () => {
     ["linux-loongarch64-musl", "foo-loongarch64-unknown-linux-musl.zip"],
     ["linux-powerpc64", "foo-powerpc64le-unknown-linux-gnu.zip"],
     ["linux-powerpc64-musl", "foo-powerpc64le-unknown-linux-musl.zip"],
+    ["android-x86_64", "foo-x86_64-linux-android.zip"],
+    ["android-aarch64", "foo-aarch64-linux-android.zip"],
     ["windows-x86_64", "foo-x86_64-pc-windows-msvc.zip"],
     ["windows-aarch64", "foo-aarch64-pc-windows-msvc.zip"],
   ];
