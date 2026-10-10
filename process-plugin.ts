@@ -16,11 +16,14 @@ export type Platform =
   // variants -- not the `powerpc64le` used in the target triple / zip name.
   | "linux-powerpc64"
   | "linux-powerpc64-musl"
+  | "linux-s390x"
   // android (Termux) uses bionic libc, so there's no gnu/musl split. the os
   // segment is the runtime lookup key dprint resolves against Rust's
   // `std::env::consts::OS` (`android`), not the `linux` in the target triple.
   | "android-x86_64"
   | "android-aarch64"
+  | "freebsd-x86_64"
+  | "freebsd-aarch64"
   | "windows-x86_64"
   | "windows-aarch64";
 
@@ -50,10 +53,16 @@ export function getStandardZipFileName(pluginName: string, platform: Platform): 
       return `${pluginName}-powerpc64le-unknown-linux-gnu.zip`;
     case "linux-powerpc64-musl":
       return `${pluginName}-powerpc64le-unknown-linux-musl.zip`;
+    case "linux-s390x":
+      return `${pluginName}-s390x-unknown-linux-gnu.zip`;
     case "android-x86_64":
       return `${pluginName}-x86_64-linux-android.zip`;
     case "android-aarch64":
       return `${pluginName}-aarch64-linux-android.zip`;
+    case "freebsd-x86_64":
+      return `${pluginName}-x86_64-unknown-freebsd.zip`;
+    case "freebsd-aarch64":
+      return `${pluginName}-aarch64-unknown-freebsd.zip`;
     case "windows-x86_64":
       return `${pluginName}-x86_64-pc-windows-msvc.zip`;
     case "windows-aarch64":
@@ -238,7 +247,8 @@ export interface CreateDprintOrgNpmPackagesResult {
  * `linux-x64-glibc`, `linux-x64-musl`, `linux-arm64-glibc`,
  * `linux-arm64-musl`, `linux-riscv64-glibc`, `linux-riscv64-musl`,
  * `linux-loong64-glibc`, `linux-loong64-musl`, `linux-ppc64-glibc`,
- * `linux-ppc64-musl`, `android-x64`, `android-arm64`, `win32-x64`,
+ * `linux-ppc64-musl`, `linux-s390x-glibc`, `android-x64`, `android-arm64`,
+ * `freebsd-x64`, `freebsd-arm64`, `win32-x64`,
  * `win32-arm64`.
  *
  * After each sub-package dir is written, `npm pack` is run inside it to
@@ -434,10 +444,16 @@ function npmPlatformInfo(platform: Platform): NpmPlatformInfo {
       return { suffix: "linux-ppc64-glibc", os: ["linux"], cpu: ["ppc64"], libc: ["glibc"] };
     case "linux-powerpc64-musl":
       return { suffix: "linux-ppc64-musl", os: ["linux"], cpu: ["ppc64"], libc: ["musl"] };
+    case "linux-s390x":
+      return { suffix: "linux-s390x-glibc", os: ["linux"], cpu: ["s390x"], libc: ["glibc"] };
     case "android-x86_64":
       return { suffix: "android-x64", os: ["android"], cpu: ["x64"] };
     case "android-aarch64":
       return { suffix: "android-arm64", os: ["android"], cpu: ["arm64"] };
+    case "freebsd-x86_64":
+      return { suffix: "freebsd-x64", os: ["freebsd"], cpu: ["x64"] };
+    case "freebsd-aarch64":
+      return { suffix: "freebsd-arm64", os: ["freebsd"], cpu: ["arm64"] };
     case "windows-x86_64":
       return { suffix: "win32-x64", os: ["win32"], cpu: ["x64"] };
     case "windows-aarch64":
