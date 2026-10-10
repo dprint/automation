@@ -4,6 +4,7 @@
     "jsr:@david/console-static-text@0.3": "0.3.4",
     "jsr:@david/dax@0.45.0": "0.45.0",
     "jsr:@david/path@0.2": "0.2.0",
+    "jsr:@david/publish-on-tag@0.2.0": "0.2.0",
     "jsr:@david/which@~0.4.1": "0.4.2",
     "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/bytes@^1.0.6": "1.0.6",
@@ -37,6 +38,12 @@
       "dependencies": [
         "jsr:@std/fs",
         "jsr:@std/path@1"
+      ]
+    },
+    "@david/publish-on-tag@0.2.0": {
+      "integrity": "6a4abcc352141e46e705041ca73836176d64cebc1080b6d915de630df9853dea",
+      "dependencies": [
+        "jsr:@std/semver"
       ]
     },
     "@david/which@0.4.2": {
