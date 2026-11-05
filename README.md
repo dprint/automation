@@ -48,3 +48,33 @@ await builder.writeToPath("plugin.json");
    deno run --allow-read=. --allow-write=. create_process_plugin.ts
    ```
 4. Upload the `plugin.json` file and all the zip files to the GitHub release.
+
+## Publishing a Config Schema
+
+A wasm plugin's config schema can have code examples that https://dprint.dev shows in the plugin's configuration documentation. Declare one with an `x-example` on a property, or on the definition named after the property:
+
+```jsonc
+"quoteStyle": {
+  "$ref": "#/definitions/quoteStyle",
+  "x-example": {
+    // optional, the configuration besides the property
+    "config": { "lineWidth": 40 },
+    // optional, defaults to the --extension argument below
+    "extension": "tsx",
+    "input": [
+      "const single = 'text';",
+      "const double = \"text\";"
+    ]
+  }
+}
+```
+
+Then on CI, after building the plugin, run:
+
+```shell
+deno run -A jsr:@dprint/automation/tasks/publish-schema path/to/plugin.wasm path/to/schema.json --extension ts
+```
+
+This formats each example's input with each value of its property and adds the outputs to the schema as `"outputs": { "<value>": "<formatted text>" }`, where a value that isn't a string is in JSON (ex. `"true"`). Upload the schema to the release after it runs.
+
+It fails when the plugin has a diagnostic for the default of any property in the schema (ex. a property the plugin doesn't know about) or when an example formats the same with every value of its property.
