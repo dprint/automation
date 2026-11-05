@@ -109,6 +109,54 @@ Deno.test("throws for each example that can't be generated", () => {
   );
 });
 
+Deno.test("allows sections with every top level property", () => {
+  const schema = {
+    "x-sections": [
+      { title: "General", properties: ["lineWidth"] },
+      { title: "Spaces", properties: ["memberSpacing"] },
+    ],
+    definitions: { memberSpacing: { type: "string" } },
+    properties: {
+      $schema: { type: "string" },
+      lineWidth: { type: "integer" },
+      memberSpacing: { $ref: "#/definitions/memberSpacing" },
+      // shown under `memberSpacing`
+      "classDeclaration.memberSpacing": { $ref: "#/definitions/memberSpacing" },
+    },
+  };
+
+  prepareSchemaForPublish(schema, createFormatter(["lineWidth", "memberSpacing", "classDeclaration.memberSpacing"]));
+});
+
+Deno.test("throws when a top level property isn't in exactly one section", () => {
+  const schema = {
+    "x-sections": [
+      { title: "General", properties: ["lineWidth", "missing", "classDeclaration.memberSpacing"] },
+      { title: "Spaces", properties: ["lineWidth"] },
+    ],
+    definitions: { memberSpacing: { type: "string" } },
+    properties: {
+      lineWidth: { type: "integer" },
+      useTabs: { type: "boolean" },
+      memberSpacing: { $ref: "#/definitions/memberSpacing" },
+      "classDeclaration.memberSpacing": { $ref: "#/definitions/memberSpacing" },
+    },
+  };
+  const formatter = createFormatter(["lineWidth", "useTabs", "memberSpacing", "classDeclaration.memberSpacing"]);
+
+  assertThrows(
+    () => prepareSchemaForPublish(schema, formatter),
+    Error,
+    [
+      `The "General" section has "missing", which isn't a property.`,
+      `The "General" section has "classDeclaration.memberSpacing", which is shown under "memberSpacing".`,
+      `The "Spaces" section has "lineWidth", which is already in the "General" section.`,
+      `"useTabs" isn't in a section.`,
+      `"memberSpacing" isn't in a section.`,
+    ].join("\n"),
+  );
+});
+
 // creates a formatter that accepts the given properties and outputs the file
 // path and config before the text
 function createFormatter(propertyNames: string[]): SchemaFormatter {

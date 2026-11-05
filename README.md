@@ -78,3 +78,15 @@ deno run -A jsr:@dprint/automation/tasks/publish-schema path/to/plugin.wasm path
 This formats each example's input with each value of its property and adds the outputs to the schema as `"outputs": { "<value>": "<formatted text>" }`, where a value that isn't a string is in JSON (ex. `"true"`). Upload the schema to the release after it runs.
 
 It fails when the plugin has a diagnostic for the default of any property in the schema (ex. a property the plugin doesn't know about) or when an example formats the same with every value of its property.
+
+The schema can also group its properties into sections, which dprint.dev shows as headings with a table of contents. Declare them in order at the root of the schema:
+
+```jsonc
+"x-sections": [{
+  "title": "Imports and exports",
+  "description": "The sorting and line breaks of import and export declarations.",
+  "properties": ["module.sortImportDeclarations", "importDeclaration.forceSingleLine"]
+}]
+```
+
+A property that refers to another property's definition or whose last segment is another property's name (ex. `classExpression.memberSpacing` with `memberSpacing`) is shown under that property, so it isn't listed. When a schema has sections, the task fails unless every other property is in exactly one of them.
