@@ -62,7 +62,26 @@ interface Schema {
   definitions?: Record<string, SchemaDefinition>;
   $defs?: Record<string, SchemaDefinition>;
   "x-sections"?: SchemaSection[];
+  "x-playground"?: SchemaPlayground;
 }
+
+/**
+ * The code the dprint.dev playground starts with when the plugin is selected,
+ * which is declared in the schema's `"x-playground"`. It's best when the code
+ * isn't formatted, so the playground shows what formatting does.
+ */
+export interface SchemaPlayground {
+  /**
+   * The file extension of the code (ex. `"tsx"`). When it isn't specified,
+   * `prepareSchemaForPublish` sets it to the default extension.
+   */
+  extension?: string;
+  /** The lines of code. */
+  input: string[];
+}
+
+// the most characters of a playground's code
+const MAX_PLAYGROUND_LENGTH = 20_000;
 
 /**
  * A section of the plugin's configuration documentation on dprint.dev, which is
@@ -111,7 +130,7 @@ export function prepareSchemaForPublish(
   const usesOverrides = Object.values(root.properties).some((property) => property["x-overrides"] != null);
 
   checkPropertiesAreAccepted();
-  const errors: string[] = [...getOverrideErrors(), ...getSectionErrors()];
+  const errors: string[] = [...getOverrideErrors(), ...getSectionErrors(), ...getPlaygroundErrors()];
   for (const [name, definition] of [...Object.entries(definitions), ...Object.entries(root.properties)]) {
     const example = definition["x-example"];
     if (example != null) {
@@ -257,6 +276,37 @@ export function prepareSchemaForPublish(
     } else {
       return undefined;
     }
+  }
+
+  // checks the playground's code formats and is changed by formatting, so it
+  // shows what the plugin does, and sets its extension
+  function getPlaygroundErrors() {
+    const playground = root["x-playground"];
+    if (playground == null) {
+      return [];
+    }
+    if (!Array.isArray(playground.input) || playground.input.some((line) => typeof line !== "string")) {
+      return [`The playground's input isn't an array of lines.`];
+    }
+    const text = playground.input.join("\n") + "\n";
+    if (text.length > MAX_PLAYGROUND_LENGTH) {
+      return [`The playground's input is over ${MAX_PLAYGROUND_LENGTH} characters.`];
+    }
+    const extension = playground.extension ?? options.extension;
+    if (extension == null) {
+      return [`The playground needs an extension because there's no default extension.`];
+    }
+    try {
+      setConfig({}, "the playground");
+      const output = formatter.formatText({ filePath: `playground.${extension}`, fileText: text });
+      if (output === text) {
+        return [`The playground's input is already formatted, so it doesn't show what formatting does.`];
+      }
+    } catch (err) {
+      return [`The playground's input failed to format: ${(err as Error).message}`];
+    }
+    playground.extension = extension;
+    return [];
   }
 
   function generateOutputs(propertyName: string, example: SchemaExample) {
