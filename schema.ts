@@ -24,7 +24,11 @@ export interface PrepareSchemaOptions {
 export interface SchemaExample {
   /** The configuration to format the input with, besides the property. */
   config?: Record<string, unknown>;
-  /** The file extension to format the input as (ex. `"tsx"`). */
+  /**
+   * The file extension to format the input as (ex. `"tsx"`). When it isn't
+   * specified, `prepareSchemaForPublish` sets it to the default extension, so
+   * dprint.dev knows the language to highlight the code as.
+   */
   extension?: string;
   /** The lines of code to format. */
   input: string[];
@@ -113,6 +117,7 @@ export function prepareSchemaForPublish(
     if (example != null) {
       try {
         example.outputs = generateOutputs(name, example);
+        example.extension ??= options.extension;
       } catch (err) {
         errors.push((err as Error).message);
       }
