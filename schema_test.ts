@@ -157,9 +157,64 @@ Deno.test("throws when a top level property isn't in exactly one section", () =>
   );
 });
 
+Deno.test("allows overrides that match the plugin and listing them in a section", () => {
+  const schema = {
+    "x-sections": [{ title: "General", properties: ["bracePosition", "jsx.bracePosition"] }],
+    definitions: { bracePosition: { type: "string", enum: ["sameLine", "nextLine"] } },
+    properties: {
+      bracePosition: { $ref: "#/definitions/bracePosition" },
+      // shown on its own because it's listed
+      "jsx.bracePosition": { $ref: "#/definitions/bracePosition", "x-overrides": "bracePosition" },
+      // shown under `bracePosition`
+      "classDeclaration.bracePosition": { $ref: "#/definitions/bracePosition", "x-overrides": "bracePosition" },
+    },
+  };
+  const properties = ["bracePosition", "jsx.bracePosition", "classDeclaration.bracePosition"];
+  const overrides = { "jsx.bracePosition": "bracePosition", "classDeclaration.bracePosition": "bracePosition" };
+
+  prepareSchemaForPublish(schema, createFormatter(properties, overrides));
+});
+
+Deno.test("throws when the overrides don't match the plugin", () => {
+  const schema = {
+    "x-sections": [{ title: "General", properties: ["bracePosition", "useTabs", "quoteStyle"] }],
+    properties: {
+      bracePosition: { type: "string", enum: ["sameLine", "nextLine"] },
+      useTabs: { type: "boolean" },
+      quoteStyle: { type: "string", enum: ["single", "double"] },
+      // missing its "x-overrides"
+      "classDeclaration.bracePosition": { type: "string", enum: ["sameLine", "nextLine"] },
+      // overrides the wrong property
+      "jsx.quoteStyle": { type: "string", enum: ["single", "double"], "x-overrides": "useTabs" },
+      "jsx.other": { type: "boolean", "x-overrides": "missing" },
+    },
+  };
+  const properties = ["bracePosition", "useTabs", "quoteStyle", "classDeclaration.bracePosition", "jsx.quoteStyle"];
+  const overrides = { "classDeclaration.bracePosition": "bracePosition", "jsx.quoteStyle": "quoteStyle" };
+
+  assertThrows(
+    () => prepareSchemaForPublish(schema, createFormatter([...properties, "jsx.other"], overrides)),
+    Error,
+    `"jsx.other" overrides "missing", which isn't a property.`,
+  );
+
+  delete (schema.properties as Record<string, unknown>)["jsx.other"];
+  assertThrows(
+    () => prepareSchemaForPublish(schema, createFormatter(properties, overrides)),
+    Error,
+    [
+      `Setting "bracePosition" changes "classDeclaration.bracePosition", so "classDeclaration.bracePosition" should have "x-overrides": "bracePosition".`,
+      `"jsx.quoteStyle" overrides "useTabs", but setting "useTabs" doesn't change it.`,
+      `Setting "quoteStyle" changes "jsx.quoteStyle", so "jsx.quoteStyle" should have "x-overrides": "quoteStyle".`,
+      `"classDeclaration.bracePosition" isn't in a section.`,
+    ].join("\n"),
+  );
+});
+
 // creates a formatter that accepts the given properties and outputs the file
-// path and config before the text
-function createFormatter(propertyNames: string[]): SchemaFormatter {
+// path and config before the text, where a property in `overrides` resolves to
+// the value of the property it overrides when it isn't set
+function createFormatter(propertyNames: string[], overrides: Record<string, string> = {}): SchemaFormatter {
   let config: Record<string, unknown> = {};
   return {
     setConfig(_globalConfig, pluginConfig) {
@@ -169,6 +224,12 @@ function createFormatter(propertyNames: string[]): SchemaFormatter {
       return Object.keys(config)
         .filter((name) => !propertyNames.includes(name))
         .map((name) => ({ propertyName: name, message: "Unknown property." }));
+    },
+    getResolvedConfig() {
+      return Object.fromEntries(propertyNames.map((name) => {
+        const overridden = overrides[name];
+        return [name, config[name] ?? (overridden == null ? null : config[overridden] ?? null)];
+      }));
     },
     formatText(request) {
       return `${request.filePath} ${JSON.stringify(config)}\n${request.fileText}`;

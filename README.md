@@ -90,3 +90,14 @@ The schema can also group its properties into sections, which dprint.dev shows a
 ```
 
 A property that refers to another property's definition or whose last segment is another property's name (ex. `classExpression.memberSpacing` with `memberSpacing`) is shown under that property, so it isn't listed. When a schema has sections, the task fails unless every other property is in exactly one of them.
+
+A property that overrides another property for one kind of node, and defaults to its value, declares which one with `x-overrides`:
+
+```jsonc
+"classDeclaration.bracePosition": {
+  "$ref": "#/definitions/bracePosition",
+  "x-overrides": "bracePosition"
+}
+```
+
+dprint.dev shows an override under the property it overrides unless the override is listed in a section, which shows it on its own as well. When a schema uses `x-overrides`, the task also checks them against the plugin: it sets each property with a fixed set of values (a `oneOf`, an `enum`, or a boolean) to each of those values, then fails when that changes another property without an `x-overrides` of it, or doesn't change a property with one.

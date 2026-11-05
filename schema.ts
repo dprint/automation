@@ -5,6 +5,7 @@
 export interface SchemaFormatter {
   setConfig(globalConfig: Record<string, unknown>, pluginConfig: Record<string, unknown>): void;
   getConfigDiagnostics(): unknown[];
+  getResolvedConfig(): Record<string, unknown>;
   formatText(request: { filePath: string; fileText: string }): string;
 }
 
@@ -44,6 +45,12 @@ interface SchemaDefinition {
   deprecationMessage?: string;
   deprecated?: boolean;
   "x-example"?: SchemaExample;
+  /**
+   * The property this property overrides for one kind of node, which it
+   * defaults to the value of (ex. `"bracePosition"` on
+   * `classDeclaration.bracePosition`).
+   */
+  "x-overrides"?: string;
 }
 
 interface Schema {
@@ -61,10 +68,14 @@ export interface SchemaSection {
   title: string;
   description?: string;
   /**
-   * The top level properties in the section, in order. A property that refers
-   * to another property's definition (ex. `classExpression.memberSpacing`
-   * referring to `memberSpacing`) is shown under that property instead, so it
-   * isn't listed.
+   * The properties in the section, in order.
+   *
+   * A property with an `"x-overrides"` that isn't listed is shown under the
+   * property it overrides instead. When the schema doesn't use
+   * `"x-overrides"`, a property that refers to another property's definition
+   * or whose last segment is another property's name (ex.
+   * `classExpression.memberSpacing` with `memberSpacing`) is shown under that
+   * property and can't be listed.
    */
   properties: string[];
 }
@@ -80,6 +91,11 @@ const IGNORED_PROPERTY_NAMES = new Set(["$schema", "deno", "locked"]);
  * schema. It throws when that fails, an example formats the same with every
  * value of its property, or the schema has sections (see `SchemaSection`) and
  * a top level property isn't in exactly one of them.
+ *
+ * When the schema uses `"x-overrides"`, it also throws when the plugin doesn't
+ * match them, which is when setting a property with a fixed set of values
+ * changes another property without an `"x-overrides"` of it, or doesn't
+ * change a property that has one.
  */
 export function prepareSchemaForPublish(
   schema: unknown,
@@ -88,9 +104,10 @@ export function prepareSchemaForPublish(
 ): void {
   const root = schema as Schema;
   const definitions = root.definitions ?? root.$defs ?? {};
+  const usesOverrides = Object.values(root.properties).some((property) => property["x-overrides"] != null);
 
   checkPropertiesAreAccepted();
-  const errors: string[] = getSectionErrors();
+  const errors: string[] = [...getOverrideErrors(), ...getSectionErrors()];
   for (const [name, definition] of [...Object.entries(definitions), ...Object.entries(root.properties)]) {
     const example = definition["x-example"];
     if (example != null) {
@@ -115,6 +132,69 @@ export function prepareSchemaForPublish(
     setConfig(config, "the property defaults");
   }
 
+  function getOverrideErrors() {
+    if (!usesOverrides) {
+      return [];
+    }
+    const errors: string[] = [];
+    for (const [name, property] of Object.entries(root.properties)) {
+      const overridden = property["x-overrides"];
+      if (overridden == null) {
+        continue;
+      }
+      const overriddenProperty = root.properties[overridden];
+      if (overriddenProperty == null || IGNORED_PROPERTY_NAMES.has(overridden)) {
+        errors.push(`"${name}" overrides "${overridden}", which isn't a property.`);
+      } else if (overriddenProperty["x-overrides"] != null) {
+        errors.push(`"${name}" overrides "${overridden}", which overrides "${overriddenProperty["x-overrides"]}".`);
+      }
+    }
+    if (errors.length > 0) {
+      return errors;
+    }
+
+    // compares the overrides to the properties the plugin changes when each
+    // property that isn't an override is set to each of its values
+    setConfig({}, "no configuration");
+    const defaultConfig = formatter.getResolvedConfig();
+    const changedBy = new Map<string, Set<string>>();
+    const checkedProperties = new Set<string>();
+    for (const [name, property] of Object.entries(root.properties)) {
+      if (IGNORED_PROPERTY_NAMES.has(name) || property["x-overrides"] != null) {
+        continue;
+      }
+      const values = getValues(resolveRef(property));
+      if (values.length > 0) {
+        checkedProperties.add(name);
+      }
+      for (const value of values) {
+        setConfig({ [name]: value }, `"${name}" set to ${JSON.stringify(value)}`);
+        for (const [key, resolvedValue] of Object.entries(formatter.getResolvedConfig())) {
+          const isChanged = JSON.stringify(resolvedValue) !== JSON.stringify(defaultConfig[key]);
+          if (key !== name && key in root.properties && isChanged) {
+            changedBy.set(key, (changedBy.get(key) ?? new Set()).add(name));
+          }
+        }
+      }
+    }
+    for (const [name, property] of Object.entries(root.properties)) {
+      const overridden = property["x-overrides"];
+      const changers = changedBy.get(name) ?? new Set();
+      // a property the plugin doesn't resolve can't be checked
+      if (
+        overridden != null && checkedProperties.has(overridden) && name in defaultConfig && !changers.has(overridden)
+      ) {
+        errors.push(`"${name}" overrides "${overridden}", but setting "${overridden}" doesn't change it.`);
+      }
+      for (const changer of changers) {
+        if (changer !== overridden) {
+          errors.push(`Setting "${changer}" changes "${name}", so "${name}" should have "x-overrides": "${changer}".`);
+        }
+      }
+    }
+    return errors;
+  }
+
   function getSectionErrors() {
     const sections = root["x-sections"];
     if (sections == null) {
@@ -125,7 +205,9 @@ export function prepareSchemaForPublish(
     for (const section of sections) {
       for (const name of section.properties) {
         const property = root.properties[name];
-        const parentName = property == null ? undefined : getParentPropertyName(name, property);
+        // an override that's listed is shown on its own, but without overrides
+        // the property dprint.dev guesses it's under always shows it
+        const parentName = property == null || usesOverrides ? undefined : getParentPropertyName(name, property);
         const otherSection = sectionByProperty.get(name);
         if (property == null || IGNORED_PROPERTY_NAMES.has(name)) {
           errors.push(`The "${section.title}" section has "${name}", which isn't a property.`);
@@ -149,10 +231,15 @@ export function prepareSchemaForPublish(
     return errors;
   }
 
-  // gets the property that dprint.dev shows a property under, which is the
-  // property whose definition it refers to or whose name is its last segment
-  // (ex. `classExpression.memberSpacing` is shown under `memberSpacing`)
+  // gets the property that dprint.dev shows a property under when it isn't
+  // listed in a section, which is the property it overrides or, when the schema
+  // doesn't use overrides, the property whose definition it refers to or whose
+  // name is its last segment (ex. `classExpression.memberSpacing` is shown
+  // under `memberSpacing`)
   function getParentPropertyName(name: string, property: SchemaDefinition) {
+    if (usesOverrides) {
+      return property["x-overrides"];
+    }
     if (property.$ref == null) {
       return undefined;
     }
