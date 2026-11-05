@@ -59,7 +59,8 @@ A wasm plugin's config schema can have code examples that https://dprint.dev sho
   "x-example": {
     // optional, the configuration besides the property
     "config": { "lineWidth": 40 },
-    // optional, defaults to the --extension argument below
+    // optional, defaults to the --extension argument below, which is then
+    // written here so dprint.dev knows the language to highlight
     "extension": "tsx",
     "input": [
       "const single = 'text';",

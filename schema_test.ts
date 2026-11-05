@@ -30,6 +30,8 @@ Deno.test("adds the output of each value to the examples", () => {
   prepareSchemaForPublish(schema, createFormatter(["semicolons", "useTabs", "lineWidth"]), { extension: "ts" });
 
   assertEquals(semicolonsExample, {
+    // set to the default extension
+    extension: "ts",
     input: ["a", "b"],
     outputs: {
       always: `example.ts {"semicolons":"always"}\na\nb\n`,
