@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { prepareSchemaForPublish, type SchemaExample, type SchemaFormatter } from "./schema.ts";
+import { prepareSchemaForPublish, type SchemaExample, type SchemaFormatter, type SchemaPlayground } from "./schema.ts";
 
 Deno.test("adds the output of each value to the examples", () => {
   const semicolonsExample: SchemaExample = { input: ["a", "b"] };
@@ -211,6 +211,44 @@ Deno.test("throws when the overrides don't match the plugin", () => {
       `"classDeclaration.bracePosition" isn't in a section.`,
     ].join("\n"),
   );
+});
+
+Deno.test("checks the playground's code and sets its extension", () => {
+  const playground: SchemaPlayground = { input: ["const  a=1"] };
+  const schema = { "x-playground": playground, properties: { useTabs: { type: "boolean" } } };
+
+  prepareSchemaForPublish(schema, createFormatter(["useTabs"]), { extension: "ts" });
+
+  assertEquals(playground, { extension: "ts", input: ["const  a=1"] });
+});
+
+Deno.test("throws when the playground's code can't be used", () => {
+  const formatter = createFormatter([]);
+  const check = (playground: unknown, options = { extension: "ts" }) =>
+    assertThrows(() => prepareSchemaForPublish({ "x-playground": playground, properties: {} }, formatter, options));
+
+  check({ input: "const a = 1;" });
+  check({ input: ["a".repeat(20_001)] });
+  check({ input: ["const a = 1;"] }, { extension: undefined! });
+
+  // already formatted
+  const formatText = formatter.formatText;
+  formatter.formatText = (request) => request.fileText;
+  assertThrows(
+    () => prepareSchemaForPublish({ "x-playground": { input: ["a"] }, properties: {} }, formatter, { extension: "ts" }),
+    Error,
+    "The playground's input is already formatted",
+  );
+  // fails to format
+  formatter.formatText = () => {
+    throw new Error("Unexpected token.");
+  };
+  assertThrows(
+    () => prepareSchemaForPublish({ "x-playground": { input: ["a"] }, properties: {} }, formatter, { extension: "ts" }),
+    Error,
+    "The playground's input failed to format: Unexpected token.",
+  );
+  formatter.formatText = formatText;
 });
 
 // creates a formatter that accepts the given properties and outputs the file

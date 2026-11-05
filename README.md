@@ -102,3 +102,18 @@ A property that overrides another property for one kind of node, and defaults to
 ```
 
 dprint.dev shows an override under the property it overrides unless the override is listed in a section, which shows it on its own as well. When a schema uses `x-overrides`, the task also checks them against the plugin: it sets each property with a fixed set of values (a `oneOf`, an `enum`, or a boolean) to each of those values, then fails when that changes another property without an `x-overrides` of it, or doesn't change a property with one.
+
+The schema can also have the code the [playground](https://dprint.dev/playground) starts with when the plugin is selected. It's best when the code isn't formatted, so the playground shows what formatting does:
+
+```jsonc
+"x-playground": {
+  // optional, defaults to the --extension argument
+  "extension": "ts",
+  "input": [
+    "const  value={a:1,b:2}",
+    "function   run( ) { return value }"
+  ]
+}
+```
+
+The task fails when the code is over 20,000 characters, doesn't format, or is already formatted.
