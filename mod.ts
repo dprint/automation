@@ -5,3 +5,4 @@ export * from "./cargo.ts";
 export * from "./changelog.ts";
 export * from "./hash.ts";
 export * as processPlugin from "./process-plugin.ts";
+export * from "./schema.ts";

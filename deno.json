@@ -3,11 +3,13 @@
   "imports": {
     "dax": "jsr:@david/dax@0.45.0",
     "semver": "jsr:@std/semver@1",
-    "@std/assert": "jsr:@std/assert@1"
+    "@std/assert": "jsr:@std/assert@1",
+    "@dprint/formatter": "npm:@dprint/formatter@0.4.1"
   },
   "exports": {
     ".": "./mod.ts",
-    "./tasks/publish-release": "./tasks/publish-release.ts"
+    "./tasks/publish-release": "./tasks/publish-release.ts",
+    "./tasks/publish-schema": "./tasks/publish-schema.ts"
   },
   "lint": {
     "rules": {

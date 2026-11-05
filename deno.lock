@@ -15,6 +15,7 @@
     "jsr:@std/path@1": "1.1.4",
     "jsr:@std/path@^1.1.4": "1.1.4",
     "jsr:@std/semver@1": "1.0.8",
+    "npm:@dprint/formatter@0.4.1": "0.4.1",
     "npm:dprint@*": "0.52.0"
   },
   "jsr": {
@@ -98,6 +99,9 @@
       "os": ["darwin"],
       "cpu": ["x64"]
     },
+    "@dprint/formatter@0.4.1": {
+      "integrity": "sha512-IB/GXdlMOvi0UhQQ9mcY15Fxcrc2JPadmo6tqefCNV0bptFq7YBpggzpqYXldBXDa04CbKJ+rDwO2eNRPE2+/g=="
+    },
     "@dprint/linux-arm64-glibc@0.52.0": {
       "integrity": "sha512-waghQcB32CLMuCxnVRQktc7U1S2qsL4spUmvCMyu4ufhZqXf4rQn07L1NcSmQOap40q9Db8ZBmLHfHm1Kab6uA==",
       "os": ["linux"],
@@ -166,7 +170,8 @@
     "dependencies": [
       "jsr:@david/dax@0.45.0",
       "jsr:@std/assert@1",
-      "jsr:@std/semver@1"
+      "jsr:@std/semver@1",
+      "npm:@dprint/formatter@0.4.1"
     ]
   }
 }
